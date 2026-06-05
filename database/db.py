@@ -850,6 +850,19 @@ def get_admin_stats() -> dict:
     }
 
 
+def get_store_stats() -> dict:
+    """Ambil statistik penjualan dan stok toko untuk home menu."""
+    with get_connection() as conn:
+        stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+        akun_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
+        total_user    = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    return {
+        "stok_tersedia": stok_tersedia,
+        "akun_terjual":  akun_terjual,
+        "total_user":    total_user
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SESSION IN-MEMORY
 # ═══════════════════════════════════════════════════════════════════════════════

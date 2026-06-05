@@ -67,7 +67,7 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Maksimum top up: <b>{fmt_rupiah(TOPUP_MAX)}</b>\n\n"
         "Ketik nominal yang ingin kamu top up (contoh: <code>50000</code>):"
     )
-    kb = [[InlineKeyboardButton("❌ Batal", callback_data="menu_utama")]]
+    kb = [[InlineKeyboardButton("❌ Batal", callback_data="menu_utama", style="danger")]]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
     db.set_session(update.effective_user.id, "waiting_topup_amount", {})
@@ -147,9 +147,9 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Setelah pembayaran dikonfirmasi, saldo otomatis bertambah ✅"
         )
         kb = [
-            [InlineKeyboardButton("💸 Bayar Sekarang", url=payment_url)],
-            [InlineKeyboardButton("🔄 Cek Status Bayar", callback_data=f"cek_topup:{order_id}")],
-            [InlineKeyboardButton("❌ Batalkan", callback_data=f"batal_topup:{order_id}")],
+            [InlineKeyboardButton("💸 Bayar Sekarang", url=payment_url, style="success")],
+            [InlineKeyboardButton("🔄 Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="success")],
+            [InlineKeyboardButton("❌ Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")],
         ]
     else:
         # Mode manual
@@ -160,7 +160,7 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Hubungi admin untuk melakukan top up manual.\n"
             f"Admin: @{ctx.bot_data.get('admin_contact', 'admin')}"
         )
-        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")]]
+        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")]]
 
     await msg.edit_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb),
                         disable_web_page_preview=True)
@@ -186,7 +186,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"💳 Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
             ]])
         )
     elif topup["status"] == "expired":
@@ -194,8 +194,8 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "⏰ <b>Pembayaran Kadaluarsa</b>\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("💳 Top Up Lagi", callback_data="topup"),
-                InlineKeyboardButton("🏠 Menu", callback_data="menu_utama"),
+                InlineKeyboardButton("💳 Top Up Lagi", callback_data="topup", style="success"),
+                InlineKeyboardButton("🏠 Menu", callback_data="menu_utama", style="danger"),
             ]])
         )
     else:
@@ -210,7 +210,7 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.edit_message_text(
         "❌ Top up dibatalkan.",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
         ]])
     )
 

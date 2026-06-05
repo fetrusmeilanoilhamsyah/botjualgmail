@@ -41,39 +41,45 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user      = update.effective_user
     user_data = db.get_user(user.id)
     saldo     = user_data["saldo"] if user_data else 0
+    stats     = db.get_store_stats()
 
     is_admin = user.id in ADMIN_IDS
 
     teks = (
-        f"👋 Halo, <b>{user.first_name}</b>!\n\n"
-        f"💰 Saldo kamu: <b>{fmt_rupiah(saldo)}</b>\n\n"
-        f"🏪 <b>Bot Jual Akun Gmail</b>\n"
-        f"Akun Gmail fresh, siap pakai, garansi 24 jam.\n\n"
-        f"Pilih menu di bawah:"
+        f"               <b>« G M A I L   S T O R E »</b>\n\n"
+        f"Halo <b>{user.first_name}</b>! Selamat datang di Gmail Store.\n"
+        f"Penyedia akun Gmail berkualitas, fresh, dan bergaransi 24 jam.\n\n"
+        f"📊 <b>STATISTIK TOKO</b>\n"
+        f"• Akun Terjual : <b>{stats['akun_terjual']:,} Akun</b>\n"
+        f"• Stok Tersedia: <b>{stats['stok_tersedia']:,} Akun</b>\n"
+        f"• Total User   : <b>{stats['total_user']:,} Pengguna</b>\n\n"
+        f"💰 <b>SALDO KAMU</b>\n"
+        f"• Saldo: <b>{fmt_rupiah(saldo)}</b>\n\n"
+        f"Silakan pilih menu di bawah ini:"
     )
 
     keyboard = [
         [
-            InlineKeyboardButton("💳 Top Up Saldo", callback_data="topup"),
-            InlineKeyboardButton("🛒 Beli Gmail",   callback_data="beli_paket"),
+            InlineKeyboardButton("💳 Top Up Saldo", callback_data="topup", style="success"),
+            InlineKeyboardButton("🛒 Beli Gmail",   callback_data="beli_paket", style="success"),
         ],
         [
-            InlineKeyboardButton("👥 Referral",      callback_data="referral"),
-            InlineKeyboardButton("🛡️ Klaim Garansi", callback_data="garansi"),
+            InlineKeyboardButton("👥 Referral",      callback_data="referral", style="primary"),
+            InlineKeyboardButton("🛡️ Klaim Garansi", callback_data="garansi", style="danger"),
         ],
         [
-            InlineKeyboardButton("📋 Riwayat Beli",   callback_data="riwayat_beli"),
-            InlineKeyboardButton("📊 Riwayat Mutasi", callback_data="riwayat_mutasi"),
+            InlineKeyboardButton("📋 Riwayat Beli",   callback_data="riwayat_beli", style="primary"),
+            InlineKeyboardButton("📊 Riwayat Mutasi", callback_data="riwayat_mutasi", style="primary"),
         ],
         [
-            InlineKeyboardButton("💬 Chat Admin", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}"),
-            InlineKeyboardButton("👤 Info Akun",  callback_data="info_akun"),
+            InlineKeyboardButton("💬 Chat Admin", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}", style="primary"),
+            InlineKeyboardButton("👤 Info Akun",  callback_data="info_akun", style="primary"),
         ],
     ]
 
     if is_admin:
         keyboard.append([
-            InlineKeyboardButton("⚙️ PANEL ADMIN", callback_data="admin_panel"),
+            InlineKeyboardButton("⚙️ PANEL ADMIN", callback_data="admin_panel", style="success"),
         ])
 
     markup = InlineKeyboardMarkup(keyboard)
@@ -114,7 +120,7 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"📅 Bergabung: {u['joined_at'][:10]}\n"
     )
 
-    kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")]]
+    kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")]]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 

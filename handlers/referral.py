@@ -37,7 +37,7 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "aktivitas mencurigakan (bot/spam).\n\n"
             "Jika ini kesalahan, hubungi admin."
         )
-        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")]]
+        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")]]
     else:
         teks = (
             "👥 <b>Program Referral</b>\n\n"
@@ -51,10 +51,8 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "⚠️ <i>Anti-bot aktif: jika terdeteksi spam, fitur akan dinonaktifkan otomatis.</i>"
         )
         kb = [
-            [InlineKeyboardButton("📋 Salin Link", copy_text=link if hasattr(InlineKeyboardButton, 'copy_text') else None,
-                                  callback_data="copy_ref_link")] if False else
-            [InlineKeyboardButton("🔗 Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!")],
-            [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")],
+            [InlineKeyboardButton("🔗 Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="success")],
+            [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")],
         ]
 
     await q.edit_message_text(teks, parse_mode="HTML",

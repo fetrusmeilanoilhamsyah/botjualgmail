@@ -45,8 +45,8 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Kamu belum pernah melakukan pembelian.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🛒 Beli Sekarang", callback_data="beli_paket"),
-                InlineKeyboardButton("🏠 Menu", callback_data="menu_utama"),
+                InlineKeyboardButton("🛒 Beli Sekarang", callback_data="beli_paket", style="success"),
+                InlineKeyboardButton("🏠 Menu", callback_data="menu_utama", style="danger"),
             ]])
         )
         return
@@ -68,18 +68,19 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         kb.append([InlineKeyboardButton(
             f"👁️ Lihat Akun #{r['id']}",
-            callback_data=f"lihat_akun:{r['id']}"
+            callback_data=f"lihat_akun:{r['id']}",
+            style="primary"
         )])
 
     # Navigasi
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("◀️ Sebelumnya", callback_data=f"riwayat_beli:{page-1}"))
+        nav.append(InlineKeyboardButton("◀️ Sebelumnya", callback_data=f"riwayat_beli:{page-1}", style="primary"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya ▶️", callback_data=f"riwayat_beli:{page+1}"))
+        nav.append(InlineKeyboardButton("Berikutnya ▶️", callback_data=f"riwayat_beli:{page+1}", style="primary"))
     if nav:
         kb.append(nav)
-    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")])
+    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")])
 
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
@@ -120,14 +121,14 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             teks += f"   📝 Catatan : {a['catatan']}\n"
 
     kb = [[
-        InlineKeyboardButton("🔙 Riwayat Beli", callback_data="riwayat_beli"),
-        InlineKeyboardButton("🏠 Menu", callback_data="menu_utama"),
+        InlineKeyboardButton("🔙 Riwayat Beli", callback_data="riwayat_beli", style="primary"),
+        InlineKeyboardButton("🏠 Menu", callback_data="menu_utama", style="danger"),
     ]]
     if detail.get("status") == "aktif":
         now_iso = datetime.now().isoformat()
         if detail.get("garansi_until", "") > now_iso:
             kb.insert(0, [InlineKeyboardButton(
-                "🛡️ Klaim Garansi", callback_data=f"pilih_garansi:{pembelian_id}"
+                "🛡️ Klaim Garansi", callback_data=f"pilih_garansi:{pembelian_id}", style="danger"
             )])
 
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -159,7 +160,7 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "📊 <b>Riwayat Mutasi</b>\n\nBelum ada transaksi.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
@@ -183,13 +184,13 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("◀️ Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}"))
+        nav.append(InlineKeyboardButton("◀️ Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}", style="primary"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya ▶️", callback_data=f"riwayat_mutasi:{page+1}"))
+        nav.append(InlineKeyboardButton("Berikutnya ▶️", callback_data=f"riwayat_mutasi:{page+1}", style="primary"))
     kb = []
     if nav:
         kb.append(nav)
-    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")])
+    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")])
 
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 

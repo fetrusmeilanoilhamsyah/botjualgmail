@@ -13,6 +13,19 @@ from datetime import datetime
 from telegram import BotCommand
 from telegram.ext import Application, ApplicationBuilder, Defaults
 
+# ── Monkeypatch InlineKeyboardButton untuk mendukung warna/style (telelokal) ──
+import telegram
+class StyledInlineKeyboardButton(telegram.InlineKeyboardButton):
+    __slots__ = ("style", "icon_custom_emoji_id")
+    def __init__(self, text, style=None, icon_custom_emoji_id=None, **kwargs):
+        super().__init__(text=text, **kwargs)
+        self._frozen = False
+        self.style = style
+        self.icon_custom_emoji_id = icon_custom_emoji_id
+        self._frozen = True
+
+telegram.InlineKeyboardButton = StyledInlineKeyboardButton
+
 # ── Logging Setup ──────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,

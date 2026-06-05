@@ -44,7 +44,7 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Jika ada masalah, hubungi admin: {ADMIN_CONTACT}",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
@@ -54,9 +54,9 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
         label    = f"#{r['id']} – {r['paket_nama']} (sisa ~{sisa_jam}j)"
-        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}")])
+        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="primary")])
 
-    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")])
+    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")])
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -76,7 +76,7 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(
             "❌ Pembelian ini sudah diklaim garansinya atau sudah selesai.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Kembali", callback_data="garansi")
+                InlineKeyboardButton("🔙 Kembali", callback_data="garansi", style="primary")
             ]])
         )
         return
@@ -86,7 +86,7 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(
             "⏰ Masa garansi pembelian ini sudah habis.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
@@ -101,7 +101,7 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "(contoh: akun tidak bisa login, password salah, dll)\n\n"
         "Ketik alasanmu:"
     )
-    kb = [[InlineKeyboardButton("❌ Batal", callback_data="garansi")]]
+    kb = [[InlineKeyboardButton("❌ Batal", callback_data="garansi", style="danger")]]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -144,7 +144,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Jika mendesak, hubungi: {ADMIN_CONTACT}",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama")
+            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
         ]])
     )
 
