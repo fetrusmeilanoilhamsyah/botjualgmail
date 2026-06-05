@@ -199,8 +199,10 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
             "Setelah pembayaran dikonfirmasi, saldo otomatis bertambah."
         )
         kb = [
-            [InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary")],
-            [InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")],
+            [
+                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary"),
+                InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")
+            ]
         ]
 
         # Kirim photo
@@ -256,7 +258,17 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     topup    = db.get_topup(order_id)
 
     if not topup:
-        await q.edit_message_text("Data topup tidak ditemukan.")
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        await ctx.bot.send_message(
+            chat_id=q.from_user.id,
+            text="Data topup tidak ditemukan.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+            ]])
+        )
         return
 
     status = topup["status"]
@@ -274,18 +286,31 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if status == "completed":
         saldo = db.get_saldo(topup["user_id"])
-        await q.edit_message_text(
-            f"Top Up Berhasil!\n\n"
-            f"Nominal: {fmt_rupiah(topup['jumlah'])}\n"
-            f"Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>",
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        await ctx.bot.send_message(
+            chat_id=topup["user_id"],
+            text=(
+                f"Top Up Berhasil!\n\n"
+                f"Nominal: {fmt_rupiah(topup['jumlah'])}\n"
+                f"Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>"
+            ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
             ]])
         )
-    elif status == "expired":
-        await q.edit_message_text(
-            "Pembayaran Kadaluarsa\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
+    elif status == "expired" or status == "cancelled":
+        status_teks = "Kadaluarsa" if status == "expired" else "Dibatalkan"
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+        await ctx.bot.send_message(
+            chat_id=topup["user_id"],
+            text=f"Pembayaran {status_teks}\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
@@ -301,8 +326,13 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer("Topup dibatalkan.")
     order_id = q.data.split(":", 1)[1]
     db.update_topup_status(order_id, "cancelled")
-    await q.edit_message_text(
-        "Top up dibatalkan.",
+    try:
+        await q.message.delete()
+    except Exception:
+        pass
+    await ctx.bot.send_message(
+        chat_id=q.from_user.id,
+        text="Top up dibatalkan.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
         ]])
