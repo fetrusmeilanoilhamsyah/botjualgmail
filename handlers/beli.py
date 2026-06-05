@@ -39,11 +39,15 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = []
+    temp_row = []
     for p in paket_list:
-        stok     = p["stok_tersedia"]
-        status   = "[Tersedia]" if stok >= p["kuantitas"] else "[Habis]"
-        label    = f"{status} {p['nama']} - {fmt_rupiah(p['harga'])} (stok: {stok})"
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"konfirmasi_beli:{p['id']}", style="primary")])
+        label = f"{p['kuantitas']} Akun — {fmt_rupiah(p['harga'])}"
+        temp_row.append(InlineKeyboardButton(label, callback_data=f"konfirmasi_beli:{p['id']}", style="primary"))
+        if len(temp_row) == 2:
+            keyboard.append(temp_row)
+            temp_row = []
+    if temp_row:
+        keyboard.append(temp_row)
 
     # Tombol Custom Quantity
     keyboard.append([InlineKeyboardButton("Beli Jumlah Custom", callback_data="beli_custom", style="primary")])

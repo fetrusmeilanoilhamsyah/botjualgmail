@@ -57,7 +57,15 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="primary")],
         [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary")],
     ]
-    await q.edit_message_text(teks, reply_markup=InlineKeyboardMarkup(kb))
+    import telegram
+    try:
+        from datetime import datetime
+        now_str = datetime.now().strftime("%H:%M:%S")
+        teks_update = f"{teks}\n<i>Terakhir di-refresh: {now_str}</i>"
+        await q.edit_message_text(teks_update, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    except telegram.error.BadRequest as e:
+        if "Message is not modified" not in str(e):
+            raise
 
 
 @admin_only

@@ -82,9 +82,9 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("Rp 10.000 (10k)", callback_data="topup_nominal:10000", style="primary"),
             InlineKeyboardButton("Rp 20.000 (20k)", callback_data="topup_nominal:20000", style="primary"),
-            InlineKeyboardButton("Rp 50.000 (50k)", callback_data="topup_nominal:50000", style="primary"),
         ],
         [
+            InlineKeyboardButton("Rp 50.000 (50k)", callback_data="topup_nominal:50000", style="primary"),
             InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary")
         ],
         [
@@ -172,32 +172,59 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         await msg.edit_text("Gagal membuat QR Code. Coba lagi atau hubungi admin.")
         return
 
-    # Simpan ke DB
-    db.create_topup(
-        user_id=user.id,
-        order_id=order_id,
-        jumlah=amount,
-        qr_chat_id=msg.chat.id,
-        qr_message_id=msg.message_id,
-    )
-
     if PAKASIR_ENABLED and order_data:
-        payment_url  = order_data.get("payment_url", "")
-        expired_at   = order_data.get("expired_at", "~15 menit")
+        payment_number = order_data.get("payment_number", "")
+        total_payment  = order_data.get("total_payment", amount)
+        expired_at     = order_data.get("expired_at", "~15 menit")
+
+        # Format expired_at to readable WIB time
+        try:
+            dt = datetime.fromisoformat(expired_at.replace("Z", "+00:00"))
+            from datetime import timedelta
+            dt_wib = dt + timedelta(hours=7)
+            readable_exp = dt_wib.strftime("%d/%m/%Y %H:%M") + " WIB"
+        except Exception:
+            readable_exp = expired_at[:16].replace("T", " ") + " WIB"
+
+        # Generate QR code image URL using public API
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={payment_number}"
 
         teks = (
             f"<b>Top Up Saldo</b>\n\n"
             f"Nominal: <b>{fmt_rupiah(amount)}</b>\n"
+            f"Total Bayar: <b>{fmt_rupiah(total_payment)}</b>\n"
             f"Order ID: <code>{order_id}</code>\n"
-            f"Berlaku s/d: {expired_at}\n\n"
-            f"Klik untuk bayar via QRIS: <a href='{payment_url}'>Bayar</a>\n\n"
+            f"Berlaku s/d: {readable_exp}\n\n"
+            "Scan QR Code di atas untuk membayar.\n"
             "Setelah pembayaran dikonfirmasi, saldo otomatis bertambah."
         )
         kb = [
-            [InlineKeyboardButton("Bayar Sekarang", url=payment_url, style="primary")],
             [InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary")],
             [InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")],
         ]
+
+        # Kirim photo
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+        sent_msg = await ctx.bot.send_photo(
+            chat_id=user.id,
+            photo=qr_url,
+            caption=teks,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+
+        # Simpan ke DB dengan ID pesan yang baru
+        db.create_topup(
+            user_id=user.id,
+            order_id=order_id,
+            jumlah=amount,
+            qr_chat_id=sent_msg.chat.id,
+            qr_message_id=sent_msg.message_id,
+        )
     else:
         # Mode manual
         teks = (
@@ -208,9 +235,17 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
             f"Admin: @{ctx.bot_data.get('admin_contact', 'admin')}"
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
-
-    await msg.edit_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb),
-                        disable_web_page_preview=True)
+        
+        # Simpan ke DB
+        db.create_topup(
+            user_id=user.id,
+            order_id=order_id,
+            jumlah=amount,
+            qr_chat_id=msg.chat.id,
+            qr_message_id=msg.message_id,
+        )
+        await msg.edit_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb),
+                            disable_web_page_preview=True)
 
 
 async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

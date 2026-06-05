@@ -249,6 +249,7 @@ def _seed_paket_default(conn):
         ("10 Akun Gmail", 10, "Pembelian 10 akun Gmail fresh", 50000, 1, 3),
         ("20 Akun Gmail", 20, "Pembelian 20 akun Gmail fresh", 100000, 1, 4),
         ("50 Akun Gmail", 50, "Pembelian 50 akun Gmail fresh", 250000, 1, 5),
+        ("100 Akun Gmail", 100, "Pembelian 100 akun Gmail fresh", 500000, 1, 6),
     ]
     conn.executemany(
         "INSERT INTO paket_gmail(nama, kuantitas, deskripsi, harga, aktif, urutan) VALUES(?,?,?,?,?,?)",
