@@ -61,7 +61,7 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Anda belum pernah melakukan pembelian akun.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="primary"),
+                InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="success"),
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
             ]])
         )
@@ -85,15 +85,15 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb.append([InlineKeyboardButton(
             f"Lihat Data Akun #{r['id']}",
             callback_data=f"lihat_akun:{r['id']}",
-            style="primary"
+            style="success"
         )])
 
     # Navigasi
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_beli:{page-1}", style="primary"))
+        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_beli:{page-1}", style="success"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_beli:{page+1}", style="primary"))
+        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_beli:{page+1}", style="success"))
     if nav:
         kb.append(nav)
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
@@ -137,7 +137,7 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             teks += f"   Catatan : {a['catatan']}\n"
 
     kb = [[
-        InlineKeyboardButton("Riwayat Beli", callback_data="riwayat_beli", style="primary"),
+        InlineKeyboardButton("Riwayat Beli", callback_data="riwayat_beli", style="success"),
         InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
     ]]
     if detail.get("status") == "aktif":
@@ -199,9 +199,9 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}", style="primary"))
+        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}", style="success"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_mutasi:{page+1}", style="primary"))
+        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_mutasi:{page+1}", style="success"))
     kb = []
     if nav:
         kb.append(nav)

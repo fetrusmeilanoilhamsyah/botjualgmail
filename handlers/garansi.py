@@ -54,7 +54,7 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
         label    = f"#{r['id']} – {r['paket_nama']} (sisa ~{sisa_jam}j)"
-        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="primary")])
+        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="success")])
 
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -76,7 +76,7 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(
             "Pembelian ini sudah diklaim garansinya atau sudah selesai.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Kembali", callback_data="garansi", style="primary")
+                InlineKeyboardButton("Kembali", callback_data="garansi", style="success")
             ]])
         )
         return
@@ -170,7 +170,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Pengajuan klaim Anda telah dicatat. Admin kami akan segera memproses penggantian akun.\n"
         f"Hubungi admin jika mendesak: {ADMIN_CONTACT}"
     )
-    kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")]]
+    kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")]]
     if menu_msg_id:
         try:
             await ctx.bot.edit_message_text(

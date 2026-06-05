@@ -41,13 +41,8 @@ async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s   = db.get_admin_stats()
     now = datetime.now().strftime("%d %b %Y %H:%M")
 
-    stok_lines = "\n".join(
-        f"   • {row['nama']}: {row['tersedia']} akun"
-        for row in s["stok"]
-    ) or "   (tidak ada data)"
-
     teks = (
-        f"<b>Dashboard Admin</b>\n"
+        f"<b>Dashboard Admin - Warung Gmail</b>\n"
         f"Update: {now}\n\n"
 
         f"<b>User</b>\n"
@@ -67,20 +62,21 @@ async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"   Klaim pending: {s['garansi_pending']}\n\n"
 
         f"<b>Stok Tersedia</b>\n"
-        f"{stok_lines}"
+        f"   • Total Stok Global: <b>{s['stok_tersedia']:,} Pcs</b>"
     )
 
     kb = [
         [
-            InlineKeyboardButton("Refresh",        callback_data="admin_stat", style="primary"),
-            InlineKeyboardButton("Klaim Garansi",  callback_data="admin_garansi_list", style="primary"),
+            InlineKeyboardButton("Refresh",        callback_data="admin_stat", style="success"),
+            InlineKeyboardButton("Klaim Garansi",  callback_data="admin_garansi_list", style="success"),
         ],
         [
-            InlineKeyboardButton("Kelola Stok",    callback_data="admin_stok_refresh", style="primary"),
-            InlineKeyboardButton("Broadcast",       callback_data="admin_broadcast_start_cb", style="primary"),
+            InlineKeyboardButton("Kelola Stok",    callback_data="admin_stok_refresh", style="success"),
+            InlineKeyboardButton("Broadcast",       callback_data="admin_broadcast_start_cb", style="success"),
         ],
         [InlineKeyboardButton("Panel Admin",       callback_data="admin_panel", style="danger")],
     ]
+
 
     reply_target = update.message if update.message else update.callback_query.message
     if update.callback_query:

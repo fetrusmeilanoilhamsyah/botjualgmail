@@ -65,7 +65,7 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         "Kirim broadcast sekarang?"
     )
     kb = [
-        [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="primary")],
+        [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="success")],
         [InlineKeyboardButton("Edit Ulang",         callback_data="admin_broadcast_reedit", style="danger")],
         [InlineKeyboardButton("Batal",              callback_data="admin_panel", style="danger")],
     ]
@@ -148,7 +148,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         f"• Gagal: {gagal} user\n"
         f"• Total: {total} user"
     )
-    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
+    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="success")]]
 
     if menu_msg_id:
         try:

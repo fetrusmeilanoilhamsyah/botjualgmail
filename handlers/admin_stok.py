@@ -54,10 +54,10 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
     kb = [
-        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
-        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="primary")],
-        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="primary")],
-        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary")],
+        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="success")],
+        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="success")],
+        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="success")],
+        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="success")],
     ]
     await ctx.bot.send_message(chat_id=update.effective_user.id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
@@ -78,10 +78,10 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
     )
     kb = [
-        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
-        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="primary")],
-        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="primary")],
-        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary")],
+        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="success")],
+        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="success")],
+        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="success")],
+        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="success")],
     ]
     import telegram
     try:
@@ -173,7 +173,7 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         f"Total diproses: {len(lines)} baris"
     )
     kb = [[
-        InlineKeyboardButton("Lihat Stok", callback_data="admin_stok_refresh", style="primary"),
+        InlineKeyboardButton("Lihat Stok", callback_data="admin_stok_refresh", style="success"),
         InlineKeyboardButton("Panel", callback_data="admin_panel", style="danger"),
     ]]
     await msg.edit_text(teks_res, reply_markup=InlineKeyboardMarkup(kb))
@@ -261,7 +261,7 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
             f"Total stok tersedia: {stok_now} akun"
         )
         kb = [[
-            InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="primary"),
+            InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="success"),
             InlineKeyboardButton("Panel", callback_data="admin_panel", style="danger"),
         ]]
         if menu_msg_id:
@@ -303,8 +303,8 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         teks += f"\n{aktif} #{p['id']} {p['nama']} - {fmt_short_rupiah(p['harga'])} | stok: {p['stok_tersedia']}"
 
     kb = [
-        [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="primary")],
-        [InlineKeyboardButton("Toggle Status Paket", callback_data="admin_toggle_paket_list", style="primary")],
+        [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="success")],
+        [InlineKeyboardButton("Toggle Status Paket", callback_data="admin_toggle_paket_list", style="success")],
         [InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")]
     ]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -362,7 +362,7 @@ async def admin_terima_harga_satuan_baru(update: Update, ctx: ContextTypes.DEFAU
         f"Harga Baru: {fmt_rupiah(harga)} / Gmail\n"
         "Harga seluruh paket otomatis diperbarui."
     )
-    kb = [[InlineKeyboardButton("Kembali", callback_data="admin_paket", style="primary")]]
+    kb = [[InlineKeyboardButton("Kembali", callback_data="admin_paket", style="success")]]
     if menu_msg_id:
         try:
             await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
@@ -383,7 +383,7 @@ async def admin_toggle_paket_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     for p in paket_list:
         status = "Aktif" if p["aktif"] else "Nonaktif"
         label = f"#{p['id']} {p['nama']} ({status})"
-        kb.append([InlineKeyboardButton(label, callback_data=f"admin_toggle_paket:{p['id']}", style="primary")])
+        kb.append([InlineKeyboardButton(label, callback_data=f"admin_toggle_paket:{p['id']}", style="success")])
     kb.append([InlineKeyboardButton("Kembali", callback_data="admin_paket", style="danger")])
     await q.edit_message_text(teks, reply_markup=InlineKeyboardMarkup(kb))
 

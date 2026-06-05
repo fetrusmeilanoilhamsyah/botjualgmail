@@ -64,7 +64,7 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     temp_row = []
     for p in paket_list:
         label = f"{p['kuantitas']} Pcs — {fmt_short_rupiah(p['harga'])}"
-        temp_row.append(InlineKeyboardButton(label, callback_data=f"konfirmasi_beli:{p['id']}", style="primary"))
+        temp_row.append(InlineKeyboardButton(label, callback_data=f"konfirmasi_beli:{p['id']}", style="success"))
         if len(temp_row) == 2:
             keyboard.append(temp_row)
             temp_row = []
@@ -72,7 +72,7 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         keyboard.append(temp_row)
 
     # Tombol Custom Quantity
-    keyboard.append([InlineKeyboardButton("Beli Jumlah Custom", callback_data="beli_custom", style="primary")])
+    keyboard.append([InlineKeyboardButton("Beli Jumlah Custom", callback_data="beli_custom", style="success")])
     keyboard.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -97,7 +97,7 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Silakan pilih paket lain atau hubungi admin.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="primary")],
+                [InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="success")],
                 [InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")],
             ])
         )
@@ -118,12 +118,12 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if cukup:
         keyboard = [
-            [InlineKeyboardButton("BELI SEKARANG", callback_data=f"eksekusi_beli:{paket_id}", style="primary")],
+            [InlineKeyboardButton("BELI SEKARANG", callback_data=f"eksekusi_beli:{paket_id}", style="success")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")],
         ]
     else:
         keyboard = [
-            [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="primary")],
+            [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="success")],
             [InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="danger")],
         ]
 
@@ -189,7 +189,7 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
             "Silakan masukkan jumlah kuantitas yang lebih kecil:"
         )
         kb = [
-            [InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="primary")],
+            [InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="success")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
         if menu_msg_id:
@@ -225,12 +225,12 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
 
     if cukup:
         kb = [
-            [InlineKeyboardButton("BELI SEKARANG", callback_data="eksekusi_beli_custom", style="primary")],
+            [InlineKeyboardButton("BELI SEKARANG", callback_data="eksekusi_beli_custom", style="success")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
     else:
         kb = [
-            [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="primary")],
+            [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="success")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
 
@@ -272,7 +272,7 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(
                 "Sesi berakhir. Silakan coba lagi dari katalog.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Beli Gmail", callback_data="beli_paket", style="primary")
+                    InlineKeyboardButton("Beli Gmail", callback_data="beli_paket", style="success")
                 ]])
             )
             return
@@ -292,7 +292,7 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "Silakan top up terlebih dahulu sebelum melakukan transaksi.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Top Up", callback_data="topup", style="primary"),
+                    InlineKeyboardButton("Top Up", callback_data="topup", style="success"),
                     InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger"),
                 ]])
             )
@@ -305,7 +305,7 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "<b>Stok Habis!</b>\n\nMaaf, stok baru saja terjual habis. Silakan coba beberapa saat lagi.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="primary"),
+                    InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
             )
@@ -426,7 +426,7 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "Silakan top up terlebih dahulu sebelum melakukan transaksi.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Top Up", callback_data="topup", style="primary"),
+                    InlineKeyboardButton("Top Up", callback_data="topup", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
             )
@@ -439,7 +439,7 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "<b>Stok Habis!</b>\n\nMaaf, stok baru saja terjual habis. Silakan coba beberapa saat lagi.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="primary"),
+                    InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
             )

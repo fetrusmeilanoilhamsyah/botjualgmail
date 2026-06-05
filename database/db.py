@@ -853,12 +853,7 @@ def get_admin_stats() -> dict:
             SELECT COALESCE(SUM(jumlah),0) as s FROM topup
             WHERE status='completed' AND date(created_at)=date('now','localtime')
         """).fetchone()["s"]
-        stok_rows = conn.execute("""
-            SELECT p.nama, COUNT(CASE WHEN s.terjual=0 THEN 1 END) as tersedia
-            FROM paket_gmail p
-            LEFT JOIN stok_gmail s ON s.paket_id=p.id
-            WHERE p.aktif=1 GROUP BY p.id
-        """).fetchall()
+        stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
     return {
         "total_user":      total_user,
         "total_saldo":     total_saldo,
@@ -868,8 +863,9 @@ def get_admin_stats() -> dict:
         "omset_hari_ini":  omset_hari,
         "garansi_pending": garansi_pending,
         "topup_hari_ini":  topup_hari,
-        "stok": [dict(r) for r in stok_rows],
+        "stok_tersedia":   stok_tersedia,
     }
+
 
 
 def get_store_stats() -> dict:

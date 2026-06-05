@@ -51,7 +51,7 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "<i>Anti-bot aktif: jika terdeteksi spam, fitur akan dinonaktifkan otomatis.</i>"
         )
         kb = [
-            [InlineKeyboardButton("Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="primary")],
+            [InlineKeyboardButton("Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="success")],
             [InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")],
         ]
 

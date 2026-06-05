@@ -37,15 +37,15 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     kb = [
         [
-            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="primary"),
-            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="primary"),
+            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="success"),
+            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="success"),
         ],
         [
-            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="primary"),
-            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="primary"),
+            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="success"),
+            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="success"),
         ],
         [
-            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="primary"),
+            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="success"),
         ],
         [InlineKeyboardButton("Menu Utama Bot",         callback_data="menu_utama", style="danger")],
     ]

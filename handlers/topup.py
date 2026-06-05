@@ -97,31 +97,31 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     kb = [
         [
-            InlineKeyboardButton("1K", callback_data="topup_nominal:1000", style="primary"),
-            InlineKeyboardButton("5K", callback_data="topup_nominal:5000", style="primary"),
+            InlineKeyboardButton("1K", callback_data="topup_nominal:1000", style="success"),
+            InlineKeyboardButton("5K", callback_data="topup_nominal:5000", style="success"),
         ],
         [
-            InlineKeyboardButton("10K", callback_data="topup_nominal:10000", style="primary"),
-            InlineKeyboardButton("15K", callback_data="topup_nominal:15000", style="primary"),
+            InlineKeyboardButton("10K", callback_data="topup_nominal:10000", style="success"),
+            InlineKeyboardButton("15K", callback_data="topup_nominal:15000", style="success"),
         ],
         [
-            InlineKeyboardButton("20K", callback_data="topup_nominal:20000", style="primary"),
-            InlineKeyboardButton("25K", callback_data="topup_nominal:25000", style="primary"),
+            InlineKeyboardButton("20K", callback_data="topup_nominal:20000", style="success"),
+            InlineKeyboardButton("25K", callback_data="topup_nominal:25000", style="success"),
         ],
         [
-            InlineKeyboardButton("30K", callback_data="topup_nominal:30000", style="primary"),
-            InlineKeyboardButton("50K", callback_data="topup_nominal:50000", style="primary"),
+            InlineKeyboardButton("30K", callback_data="topup_nominal:30000", style="success"),
+            InlineKeyboardButton("50K", callback_data="topup_nominal:50000", style="success"),
         ],
         [
-            InlineKeyboardButton("100K", callback_data="topup_nominal:100000", style="primary"),
-            InlineKeyboardButton("200K", callback_data="topup_nominal:200000", style="primary"),
+            InlineKeyboardButton("100K", callback_data="topup_nominal:100000", style="success"),
+            InlineKeyboardButton("200K", callback_data="topup_nominal:200000", style="success"),
         ],
         [
-            InlineKeyboardButton("500K", callback_data="topup_nominal:500000", style="primary"),
-            InlineKeyboardButton("1 Juta", callback_data="topup_nominal:1000000", style="primary"),
+            InlineKeyboardButton("500K", callback_data="topup_nominal:500000", style="success"),
+            InlineKeyboardButton("1 Juta", callback_data="topup_nominal:1000000", style="success"),
         ],
         [
-            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary"),
+            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="success"),
             InlineKeyboardButton("Batal", callback_data="menu_utama", style="danger")
         ]
     ]
@@ -283,7 +283,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         )
         kb = [
             [
-                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary"),
+                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="success"),
                 InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")
             ]
         ]
@@ -405,7 +405,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")
                 ]])
             )
             try:
@@ -422,7 +422,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 text=f"<b>Pembayaran {status_teks}</b>\n\nQR Code sudah tidak berlaku. Silakan ajukan top up baru.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
+                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
             )
@@ -456,7 +456,7 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             text="<b>Top Up Dibatalkan</b>\n\nTransaksi top up Anda berhasil dibatalkan.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")
             ]])
         )
         try:

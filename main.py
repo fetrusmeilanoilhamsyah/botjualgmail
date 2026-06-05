@@ -194,7 +194,7 @@ def main():
             f"Ditambah: Rp {jml:,}\n"
             f"Saldo baru: Rp {result['saldo_sesudah']:,}"
         )
-        kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
+        kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="success")]]
 
         if menu_msg_id:
             try:

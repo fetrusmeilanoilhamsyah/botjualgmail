@@ -63,35 +63,35 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="primary"),
-            InlineKeyboardButton("Beli Gmail",   callback_data="beli_paket", style="primary"),
+            InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="success"),
+            InlineKeyboardButton("Beli Gmail",   callback_data="beli_paket", style="success"),
         ],
         [
-            InlineKeyboardButton("Referral",      callback_data="referral", style="primary"),
-            InlineKeyboardButton("Klaim Garansi", callback_data="garansi", style="primary"),
+            InlineKeyboardButton("Referral",      callback_data="referral", style="success"),
+            InlineKeyboardButton("Klaim Garansi", callback_data="garansi", style="success"),
         ],
         [
-            InlineKeyboardButton("Riwayat Beli",   callback_data="riwayat_beli", style="primary"),
-            InlineKeyboardButton("Riwayat Mutasi", callback_data="riwayat_mutasi", style="primary"),
+            InlineKeyboardButton("Riwayat Beli",   callback_data="riwayat_beli", style="success"),
+            InlineKeyboardButton("Riwayat Mutasi", callback_data="riwayat_mutasi", style="success"),
         ],
     ]
 
     contact_row = []
     if len(admin_contacts) == 1:
-        contact_row.append(InlineKeyboardButton("Chat Admin", url=f"https://t.me/{admin_contacts[0].lstrip('@')}", style="danger"))
+        contact_row.append(InlineKeyboardButton("Chat Admin", url=f"https://t.me/{admin_contacts[0].lstrip('@')}", style="success"))
     else:
         for idx, contact in enumerate(admin_contacts, 1):
-            contact_row.append(InlineKeyboardButton(f"Chat Admin {idx}", url=f"https://t.me/{contact.lstrip('@')}", style="danger"))
+            contact_row.append(InlineKeyboardButton(f"Chat Admin {idx}", url=f"https://t.me/{contact.lstrip('@')}", style="success"))
 
     if len(contact_row) == 1:
         contact_row.append(InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"))
         keyboard.append(contact_row)
-        keyboard.append([InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger")])
+        keyboard.append([InlineKeyboardButton("Info Akun", callback_data="info_akun", style="success")])
     else:
         keyboard.append(contact_row)
         keyboard.append([
             InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"),
-            InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger")
+            InlineKeyboardButton("Info Akun", callback_data="info_akun", style="success")
         ])
 
     if is_admin:
@@ -103,16 +103,33 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if update.callback_query:
         await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
-                teks, parse_mode="HTML", reply_markup=markup
+        # Jika pesan lama berupa media/foto, hapus pesan lama dan kirim pesan teks baru
+        if update.callback_query.message.photo:
+            try:
+                await update.callback_query.message.delete()
+            except Exception:
+                pass
+            await ctx.bot.send_message(
+                chat_id=user.id,
+                text=teks,
+                parse_mode="HTML",
+                reply_markup=markup
             )
-        except Exception:
-            await update.callback_query.message.reply_text(
-                teks, parse_mode="HTML", reply_markup=markup
-            )
+        else:
+            try:
+                await update.callback_query.edit_message_text(
+                    teks, parse_mode="HTML", reply_markup=markup
+                )
+            except Exception:
+                await ctx.bot.send_message(
+                    chat_id=user.id,
+                    text=teks,
+                    parse_mode="HTML",
+                    reply_markup=markup
+                )
     else:
         await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
+
 
 
 async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

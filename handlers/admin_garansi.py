@@ -54,7 +54,7 @@ async def _show_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             kb.append([InlineKeyboardButton(
                 f"Proses Klaim #{g['id']}",
                 callback_data=f"admin_proses_garansi:{g['id']}",
-                style="primary"
+                style="success"
             )])
         kb.append([InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")])
 
@@ -78,7 +78,7 @@ async def cb_proses_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     kb = [
-        [InlineKeyboardButton("Setujui (Kirim Akun Pengganti)", callback_data=f"admin_setuju_garansi:{garansi_id}", style="primary")],
+        [InlineKeyboardButton("Setujui (Kirim Akun Pengganti)", callback_data=f"admin_setuju_garansi:{garansi_id}", style="success")],
         [InlineKeyboardButton("Tolak", callback_data=f"admin_tolak_garansi:{garansi_id}", style="danger")],
         [InlineKeyboardButton("Kembali", callback_data="admin_garansi_list", style="danger")],
     ]
@@ -110,7 +110,7 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = [[InlineKeyboardButton(
         f"{p['nama']} (stok: {p['stok_tersedia']})",
         callback_data=f"admin_kirim_pengganti:{garansi_id}:{p['id']}",
-        style="primary"
+        style="success"
     )] for p in paket_list if p["stok_tersedia"] > 0]
     kb.append([InlineKeyboardButton("Batal", callback_data="admin_garansi_list", style="danger")])
 
@@ -118,7 +118,7 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(
             "Tidak ada stok tersedia untuk pengganti. Tambahkan stok dulu.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Kelola Stok", callback_data="admin_stok_refresh", style="primary")
+                InlineKeyboardButton("Kelola Stok", callback_data="admin_stok_refresh", style="success")
             ]])
         )
         return
@@ -183,7 +183,7 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Akun pengganti berhasil dikirim ke user.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="primary"),
+            InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="success"),
             InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger"),
         ]])
     )
