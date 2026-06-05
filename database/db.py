@@ -1,0 +1,875 @@
+"""
+database/db.py - Database Bot Jual Gmail
+Schema: users, paket_gmail, stok_gmail, transaksi, pembelian, garansi, topup
+
+Format stok Gmail (kolom data_extra):
+  email|password|recovery_email|tanggal_buat|catatan
+  Contoh: test@gmail.com|Pass123!|recover@gmail.com|2024-01-15|fresh-indonesia
+
+Keamanan:
+  - WAL mode untuk concurrent reads
+  - Connection pool 16 koneksi
+  - Semua transaksi keuangan ATOMIC (BEGIN/COMMIT)
+  - Anti-race condition pada stok (UPDATE ... WHERE terjual=0)
+"""
+import sqlite3
+import os
+import queue
+import threading
+import logging
+import copy
+from contextlib import contextmanager
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "bot.db")
+
+# ─── CONNECTION POOL ──────────────────────────────────────────────────────────
+_conn_pool        = queue.Queue(maxsize=16)
+_pool_initialized = False
+_pool_lock        = threading.Lock()
+_session_cache    = {}
+_session_lock     = threading.Lock()
+
+
+def _init_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA cache_size=-32000")   # 32MB cache
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def init_connection_pool():
+    global _pool_initialized
+    with _pool_lock:
+        if _pool_initialized:
+            return
+        for _ in range(16):
+            _conn_pool.put(_init_connection())
+        _pool_initialized = True
+        print("✅ [botjualgmail] DB connection pool ready (16 koneksi)")
+
+
+@contextmanager
+def get_connection():
+    try:
+        conn = _conn_pool.get(timeout=30)
+    except queue.Empty:
+        raise RuntimeError("DB pool exhausted – bot overloaded!")
+    try:
+        yield conn
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _conn_pool.put(conn)
+
+
+# ─── INIT DB ──────────────────────────────────────────────────────────────────
+
+def init_db():
+    """Buat semua tabel dan index, jalankan migrasi aman."""
+    init_connection_pool()
+    with get_connection() as conn:
+        # ── users ──────────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id              INTEGER PRIMARY KEY,
+                username        TEXT    DEFAULT '',
+                full_name       TEXT    DEFAULT '',
+                saldo           INTEGER DEFAULT 0,
+                referral_by     INTEGER DEFAULT NULL,
+                referral_count  INTEGER DEFAULT 0,
+                referral_banned INTEGER DEFAULT 0,
+                joined_at       TEXT    DEFAULT (datetime('now','localtime')),
+                last_active     TEXT    DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+        # ── paket_gmail ───────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS paket_gmail (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama        TEXT    NOT NULL,
+                kuantitas   INTEGER NOT NULL DEFAULT 1,
+                deskripsi   TEXT    DEFAULT '',
+                harga       INTEGER NOT NULL DEFAULT 0,
+                aktif       INTEGER DEFAULT 1,
+                urutan      INTEGER DEFAULT 0
+            )
+        """)
+
+        # ── stok_gmail ────────────────────────────────────────────────────
+        # Format data: "email|password|recovery|tgl_buat|catatan"
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stok_gmail (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                paket_id    INTEGER NOT NULL REFERENCES paket_gmail(id),
+                email       TEXT    NOT NULL UNIQUE,
+                password    TEXT    NOT NULL,
+                recovery    TEXT    DEFAULT '',
+                tgl_buat    TEXT    DEFAULT '',
+                catatan     TEXT    DEFAULT '',
+                terjual     INTEGER DEFAULT 0,
+                terjual_at  TEXT    DEFAULT NULL,
+                terjual_ke  INTEGER DEFAULT NULL
+            )
+        """)
+
+        # ── transaksi (riwayat mutasi saldo) ──────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transaksi (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL REFERENCES users(id),
+                tipe            TEXT    NOT NULL,
+                jumlah          INTEGER NOT NULL,
+                saldo_sebelum   INTEGER NOT NULL DEFAULT 0,
+                saldo_sesudah   INTEGER NOT NULL DEFAULT 0,
+                keterangan      TEXT    DEFAULT '',
+                ref_id          TEXT    DEFAULT NULL,
+                created_at      TEXT    DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+        # ── pembelian ─────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pembelian (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL REFERENCES users(id),
+                paket_id        INTEGER NOT NULL REFERENCES paket_gmail(id),
+                harga_bayar     INTEGER NOT NULL,
+                jumlah_akun     INTEGER NOT NULL DEFAULT 1,
+                garansi_until   TEXT    NOT NULL,
+                status          TEXT    DEFAULT 'aktif',
+                created_at      TEXT    DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+        # ── pembelian_detail (akun mana yang dibeli dalam satu pembelian) ─
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pembelian_detail (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                pembelian_id INTEGER NOT NULL REFERENCES pembelian(id),
+                stok_id     INTEGER NOT NULL REFERENCES stok_gmail(id)
+            )
+        """)
+
+        # ── garansi ───────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS garansi (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                pembelian_id        INTEGER NOT NULL REFERENCES pembelian(id),
+                user_id             INTEGER NOT NULL,
+                alasan              TEXT    DEFAULT '',
+                status              TEXT    DEFAULT 'pending',
+                stok_pengganti_ids  TEXT    DEFAULT NULL,
+                admin_catatan       TEXT    DEFAULT '',
+                created_at          TEXT    DEFAULT (datetime('now','localtime')),
+                resolved_at         TEXT    DEFAULT NULL
+            )
+        """)
+
+        # ── topup ─────────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS topup (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL REFERENCES users(id),
+                order_id        TEXT    NOT NULL UNIQUE,
+                jumlah          INTEGER NOT NULL,
+                status          TEXT    DEFAULT 'pending',
+                qr_chat_id      INTEGER DEFAULT NULL,
+                qr_message_id   INTEGER DEFAULT NULL,
+                created_at      TEXT    DEFAULT (datetime('now','localtime')),
+                completed_at    TEXT    DEFAULT NULL
+            )
+        """)
+
+        # ── broadcast_log ─────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS broadcast_log (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id      INTEGER,
+                pesan         TEXT,
+                sukses        INTEGER DEFAULT 0,
+                gagal         INTEGER DEFAULT 0,
+                sent_at       TEXT    DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+        # ── schema_version ────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version     INTEGER PRIMARY KEY,
+                deskripsi   TEXT,
+                applied_at  TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+        # ── INDEXES ───────────────────────────────────────────────────────
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_paket   ON stok_gmail(paket_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_terjual ON stok_gmail(terjual)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_user     ON transaksi(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_tipe     ON transaksi(tipe)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_beli_user    ON pembelian(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_order  ON topup(order_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_user   ON topup(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_status ON topup(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_garansi_beli ON garansi(pembelian_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_ref    ON users(referral_by)")
+
+        # Version check
+        ver = conn.execute("SELECT MAX(version) as v FROM schema_version").fetchone()["v"]
+        if ver is None:
+            conn.execute("INSERT INTO schema_version(version,deskripsi) VALUES(1,'Initial schema')")
+            print("✅ [botjualgmail] Schema v1 dibuat")
+
+        # Seed paket default jika belum ada
+        cnt = conn.execute("SELECT COUNT(*) as c FROM paket_gmail").fetchone()["c"]
+        if cnt == 0:
+            _seed_paket_default(conn)
+
+        conn.commit()
+    print("✅ [botjualgmail] Database siap")
+
+
+def _seed_paket_default(conn):
+    """Insert paket default pertama kali."""
+    paket_default = [
+        ("1 Akun Gmail",  1,  "Pembelian 1 akun Gmail fresh",  5000,  1, 1),
+        ("5 Akun Gmail",  5,  "Pembelian 5 akun Gmail fresh",  22000, 1, 2),
+        ("10 Akun Gmail", 10, "Pembelian 10 akun Gmail fresh", 40000, 1, 3),
+        ("20 Akun Gmail", 20, "Pembelian 20 akun Gmail fresh", 75000, 1, 4),
+        ("50 Akun Gmail", 50, "Pembelian 50 akun Gmail fresh", 170000, 1, 5),
+    ]
+    conn.executemany(
+        "INSERT INTO paket_gmail(nama, kuantitas, deskripsi, harga, aktif, urutan) VALUES(?,?,?,?,?,?)",
+        paket_default
+    )
+    print("✅ [botjualgmail] Paket default berhasil dibuat (harga bisa diedit via admin)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# USERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def upsert_user(user_id: int, username: str, full_name: str):
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO users (id, username, full_name, last_active)
+            VALUES (?, ?, ?, datetime('now','localtime'))
+            ON CONFLICT(id) DO UPDATE SET
+                username    = excluded.username,
+                full_name   = excluded.full_name,
+                last_active = excluded.last_active
+        """, (user_id, username or "", full_name or ""))
+        conn.commit()
+
+
+def get_user(user_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_saldo(user_id: int) -> int:
+    with get_connection() as conn:
+        row = conn.execute("SELECT saldo FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["saldo"] if row else 0
+
+
+def get_all_user_ids() -> list:
+    with get_connection() as conn:
+        rows = conn.execute("SELECT id FROM users").fetchall()
+        return [r["id"] for r in rows]
+
+
+def get_total_users() -> int:
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SALDO (ATOMIC)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def tambah_saldo(user_id: int, jumlah: int, tipe: str, keterangan: str, ref_id: str = None) -> dict:
+    """
+    Tambah saldo user secara ATOMIC. Return dict {saldo_sebelum, saldo_sesudah}.
+    """
+    with get_connection() as conn:
+        conn.execute("BEGIN")
+        row = conn.execute("SELECT saldo FROM users WHERE id = ?", (user_id,)).fetchone()
+        saldo_sebelum = row["saldo"] if row else 0
+        saldo_sesudah = saldo_sebelum + jumlah
+        conn.execute("UPDATE users SET saldo = ? WHERE id = ?", (saldo_sesudah, user_id))
+        conn.execute("""
+            INSERT INTO transaksi(user_id, tipe, jumlah, saldo_sebelum, saldo_sesudah, keterangan, ref_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, tipe, jumlah, saldo_sebelum, saldo_sesudah, keterangan, ref_id))
+        conn.execute("COMMIT")
+    return {"saldo_sebelum": saldo_sebelum, "saldo_sesudah": saldo_sesudah}
+
+
+def kurangi_saldo(user_id: int, jumlah: int, tipe: str, keterangan: str, ref_id: str = None) -> dict | None:
+    """
+    Kurangi saldo ATOMIC. Return None jika saldo tidak cukup.
+    """
+    with get_connection() as conn:
+        conn.execute("BEGIN")
+        row = conn.execute("SELECT saldo FROM users WHERE id = ? FOR UPDATE", (user_id,)).fetchone()
+        if not row:
+            conn.execute("ROLLBACK")
+            return None
+        saldo_sebelum = row["saldo"]
+        if saldo_sebelum < jumlah:
+            conn.execute("ROLLBACK")
+            return None
+        saldo_sesudah = saldo_sebelum - jumlah
+        conn.execute("UPDATE users SET saldo = ? WHERE id = ?", (saldo_sesudah, user_id))
+        conn.execute("""
+            INSERT INTO transaksi(user_id, tipe, jumlah, saldo_sebelum, saldo_sesudah, keterangan, ref_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, tipe, -jumlah, saldo_sebelum, saldo_sesudah, keterangan, ref_id))
+        conn.execute("COMMIT")
+    return {"saldo_sebelum": saldo_sebelum, "saldo_sesudah": saldo_sesudah}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOPUP (PAKASIR)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def create_topup(user_id: int, order_id: str, jumlah: int,
+                 qr_chat_id: int = None, qr_message_id: int = None) -> bool:
+    try:
+        with get_connection() as conn:
+            conn.execute("""
+                INSERT INTO topup(user_id, order_id, jumlah, status, qr_chat_id, qr_message_id)
+                VALUES (?, ?, ?, 'pending', ?, ?)
+            """, (user_id, order_id, jumlah, qr_chat_id, qr_message_id))
+            conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        logger.error("[DB] create_topup: order_id duplikat %s", order_id)
+        return False
+
+
+def get_topup(order_id: str) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM topup WHERE order_id = ?", (order_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def complete_topup_if_pending(order_id: str, completed_at: str = None) -> bool:
+    """
+    ATOMIC: tandai topup selesai HANYA jika masih 'pending'.
+    Return True jika berhasil update (pertama kali), False jika sudah diproses.
+    """
+    completed_at = completed_at or datetime.now().isoformat()
+    with get_connection() as conn:
+        result = conn.execute("""
+            UPDATE topup SET status='completed', completed_at=?
+            WHERE order_id=? AND status='pending'
+        """, (completed_at, order_id))
+        conn.commit()
+        return result.rowcount > 0
+
+
+def update_topup_status(order_id: str, status: str) -> bool:
+    with get_connection() as conn:
+        conn.execute("UPDATE topup SET status=? WHERE order_id=?", (status, order_id))
+        conn.commit()
+    return True
+
+
+def expire_old_topups(minutes: int = 20) -> int:
+    cutoff = (datetime.now() - timedelta(minutes=minutes)).isoformat()
+    with get_connection() as conn:
+        r = conn.execute(
+            "UPDATE topup SET status='expired' WHERE status='pending' AND created_at < ?",
+            (cutoff,)
+        )
+        conn.commit()
+        return r.rowcount
+
+
+def get_user_topups(user_id: int, limit: int = 10) -> list:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT * FROM topup WHERE user_id=? ORDER BY created_at DESC LIMIT ?
+        """, (user_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAKET GMAIL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_paket_aktif() -> list:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT p.*, 
+                   (SELECT COUNT(*) FROM stok_gmail s WHERE s.paket_id=p.id AND s.terjual=0) as stok_tersedia
+            FROM paket_gmail p
+            WHERE p.aktif=1
+            ORDER BY p.urutan ASC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_paket_by_id(paket_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("""
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM stok_gmail s WHERE s.paket_id=p.id AND s.terjual=0) as stok_tersedia
+            FROM paket_gmail p WHERE p.id=?
+        """, (paket_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_all_paket() -> list:
+    """Untuk admin: tampilkan semua paket termasuk nonaktif."""
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM stok_gmail s WHERE s.paket_id=p.id AND s.terjual=0) as stok_tersedia,
+                   (SELECT COUNT(*) FROM stok_gmail s WHERE s.paket_id=p.id) as stok_total
+            FROM paket_gmail p ORDER BY p.urutan ASC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_paket_harga(paket_id: int, harga: int) -> bool:
+    with get_connection() as conn:
+        conn.execute("UPDATE paket_gmail SET harga=? WHERE id=?", (harga, paket_id))
+        conn.commit()
+    return True
+
+
+def toggle_paket_aktif(paket_id: int) -> bool:
+    with get_connection() as conn:
+        conn.execute("UPDATE paket_gmail SET aktif=CASE WHEN aktif=1 THEN 0 ELSE 1 END WHERE id=?", (paket_id,))
+        conn.commit()
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STOK GMAIL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def add_stok_gmail(paket_id: int, email: str, password: str,
+                   recovery: str = "", tgl_buat: str = "", catatan: str = "") -> bool:
+    """Tambah 1 akun ke stok."""
+    try:
+        with get_connection() as conn:
+            conn.execute("""
+                INSERT INTO stok_gmail(paket_id, email, password, recovery, tgl_buat, catatan)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (paket_id, email.strip(), password.strip(), recovery.strip(), tgl_buat.strip(), catatan.strip()))
+            conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        logger.warning("[DB] add_stok: email duplikat %s", email)
+        return False
+
+
+def bulk_add_stok(paket_id: int, lines: list) -> tuple[int, int]:
+    """
+    Bulk insert stok dari list string.
+    Format tiap baris: email|password|recovery|tgl_buat|catatan
+    Fields minimal: email|password (sisanya opsional)
+    Return: (berhasil, duplikat)
+    """
+    ok = 0
+    dup = 0
+    with get_connection() as conn:
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("|")
+            if len(parts) < 2:
+                continue
+            email    = parts[0].strip()
+            password = parts[1].strip()
+            recovery = parts[2].strip() if len(parts) > 2 else ""
+            tgl_buat = parts[3].strip() if len(parts) > 3 else ""
+            catatan  = parts[4].strip() if len(parts) > 4 else ""
+            if not email or not password:
+                continue
+            try:
+                conn.execute("""
+                    INSERT INTO stok_gmail(paket_id, email, password, recovery, tgl_buat, catatan)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (paket_id, email, password, recovery, tgl_buat, catatan))
+                ok += 1
+            except sqlite3.IntegrityError:
+                dup += 1
+        conn.commit()
+    return ok, dup
+
+
+def ambil_stok(paket_id: int, jumlah: int) -> list | None:
+    """
+    ATOMIC: Ambil N akun dari stok.
+    Return list dict akun, atau None jika stok kurang.
+    """
+    with get_connection() as conn:
+        conn.execute("BEGIN")
+        rows = conn.execute("""
+            SELECT id, email, password, recovery, tgl_buat, catatan
+            FROM stok_gmail
+            WHERE paket_id=? AND terjual=0
+            LIMIT ?
+        """, (paket_id, jumlah)).fetchall()
+
+        if len(rows) < jumlah:
+            conn.execute("ROLLBACK")
+            return None
+
+        ids = [r["id"] for r in rows]
+        now = datetime.now().isoformat()
+        conn.executemany(
+            "UPDATE stok_gmail SET terjual=1, terjual_at=? WHERE id=?",
+            [(now, sid) for sid in ids]
+        )
+        conn.execute("COMMIT")
+    return [dict(r) for r in rows]
+
+
+def get_stok_count(paket_id: int) -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as c FROM stok_gmail WHERE paket_id=? AND terjual=0",
+            (paket_id,)
+        ).fetchone()
+        return row["c"] if row else 0
+
+
+def get_stok_summary() -> list:
+    """Ringkasan stok per paket untuk admin."""
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT p.id, p.nama, p.harga, p.aktif,
+                   COUNT(CASE WHEN s.terjual=0 THEN 1 END) as tersedia,
+                   COUNT(CASE WHEN s.terjual=1 THEN 1 END) as terjual
+            FROM paket_gmail p
+            LEFT JOIN stok_gmail s ON s.paket_id=p.id
+            GROUP BY p.id
+            ORDER BY p.urutan
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def tandai_stok_terjual_ke(stok_ids: list, user_id: int):
+    """Tandai stok_id → terjual_ke user_id (dipakai setelah ambil_stok)."""
+    with get_connection() as conn:
+        for sid in stok_ids:
+            conn.execute("UPDATE stok_gmail SET terjual_ke=? WHERE id=?", (user_id, sid))
+        conn.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PEMBELIAN
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def create_pembelian(user_id: int, paket_id: int, harga_bayar: int,
+                     jumlah_akun: int, stok_ids: list) -> int:
+    """
+    Catat pembelian + detail akun yang dibeli.
+    Return pembelian_id.
+    """
+    from config import GARANSI_JAM
+    garansi_until = (datetime.now() + timedelta(hours=GARANSI_JAM)).isoformat()
+    with get_connection() as conn:
+        cur = conn.execute("""
+            INSERT INTO pembelian(user_id, paket_id, harga_bayar, jumlah_akun, garansi_until)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, paket_id, harga_bayar, jumlah_akun, garansi_until))
+        pembelian_id = cur.lastrowid
+        conn.executemany(
+            "INSERT INTO pembelian_detail(pembelian_id, stok_id) VALUES (?,?)",
+            [(pembelian_id, sid) for sid in stok_ids]
+        )
+        conn.commit()
+    return pembelian_id
+
+
+def get_riwayat_beli(user_id: int, limit: int = 20) -> list:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT b.id, b.paket_id, p.nama as paket_nama, b.harga_bayar,
+                   b.jumlah_akun, b.garansi_until, b.status, b.created_at
+            FROM pembelian b
+            JOIN paket_gmail p ON p.id=b.paket_id
+            WHERE b.user_id=?
+            ORDER BY b.created_at DESC
+            LIMIT ?
+        """, (user_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_detail_pembelian(pembelian_id: int, user_id: int) -> dict | None:
+    """Ambil detail pembelian + daftar akun."""
+    with get_connection() as conn:
+        beli = conn.execute("""
+            SELECT b.*, p.nama as paket_nama
+            FROM pembelian b
+            JOIN paket_gmail p ON p.id=b.paket_id
+            WHERE b.id=? AND b.user_id=?
+        """, (pembelian_id, user_id)).fetchone()
+        if not beli:
+            return None
+        akun = conn.execute("""
+            SELECT s.email, s.password, s.recovery, s.tgl_buat, s.catatan
+            FROM pembelian_detail d
+            JOIN stok_gmail s ON s.id=d.stok_id
+            WHERE d.pembelian_id=?
+        """, (pembelian_id,)).fetchall()
+        result = dict(beli)
+        result["akun_list"] = [dict(a) for a in akun]
+    return result
+
+
+def get_pembelian_by_id(pembelian_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM pembelian WHERE id=?", (pembelian_id,)).fetchone()
+        return dict(row) if row else None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GARANSI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def create_garansi(pembelian_id: int, user_id: int, alasan: str) -> int | None:
+    """
+    Buat klaim garansi. Return garansi_id atau None jika garansi sudah habis.
+    Cek: (1) pembelian milik user, (2) garansi belum kadaluarsa, (3) belum ada klaim aktif.
+    """
+    with get_connection() as conn:
+        beli = conn.execute(
+            "SELECT id, garansi_until, status FROM pembelian WHERE id=? AND user_id=?",
+            (pembelian_id, user_id)
+        ).fetchone()
+        if not beli:
+            return None  # bukan punya dia
+        if beli["status"] != "aktif":
+            return None  # sudah klaim garansi sebelumnya
+        now = datetime.now().isoformat()
+        if beli["garansi_until"] < now:
+            return None  # kadaluarsa
+
+        # Cek duplikat klaim aktif
+        existing = conn.execute(
+            "SELECT id FROM garansi WHERE pembelian_id=? AND status IN ('pending','diproses')",
+            (pembelian_id,)
+        ).fetchone()
+        if existing:
+            return None
+
+        cur = conn.execute("""
+            INSERT INTO garansi(pembelian_id, user_id, alasan)
+            VALUES (?, ?, ?)
+        """, (pembelian_id, user_id, alasan))
+        conn.execute("UPDATE pembelian SET status='klaim_garansi' WHERE id=?", (pembelian_id,))
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_garansi_pending() -> list:
+    """Untuk admin: daftar klaim garansi yang belum diproses."""
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT g.*, u.username, u.full_name,
+                   p.id as pembelian_id, pk.nama as paket_nama
+            FROM garansi g
+            JOIN users u ON u.id=g.user_id
+            JOIN pembelian p ON p.id=g.pembelian_id
+            JOIN paket_gmail pk ON pk.id=p.paket_id
+            WHERE g.status IN ('pending','diproses')
+            ORDER BY g.created_at ASC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def resolve_garansi(garansi_id: int, stok_pengganti_ids: list, admin_catatan: str = "") -> bool:
+    """Admin selesaikan garansi: kirim akun pengganti."""
+    ids_str = ",".join(str(i) for i in stok_pengganti_ids)
+    with get_connection() as conn:
+        conn.execute("""
+            UPDATE garansi SET status='selesai', stok_pengganti_ids=?,
+            admin_catatan=?, resolved_at=datetime('now','localtime')
+            WHERE id=?
+        """, (ids_str, admin_catatan, garansi_id))
+        # Update status pembelian kembali ke 'selesai'
+        row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
+        if row:
+            conn.execute("UPDATE pembelian SET status='selesai' WHERE id=?", (row["pembelian_id"],))
+        conn.commit()
+    return True
+
+
+def tolak_garansi(garansi_id: int, admin_catatan: str = "") -> bool:
+    with get_connection() as conn:
+        row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
+        conn.execute("""
+            UPDATE garansi SET status='ditolak', admin_catatan=?,
+            resolved_at=datetime('now','localtime') WHERE id=?
+        """, (admin_catatan, garansi_id))
+        if row:
+            conn.execute("UPDATE pembelian SET status='aktif' WHERE id=?", (row["pembelian_id"],))
+        conn.commit()
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REFERRAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def set_referral(user_id: int, referrer_id: int) -> bool:
+    """Set referrer hanya sekali. Return True jika berhasil."""
+    if user_id == referrer_id:
+        return False
+    with get_connection() as conn:
+        r = conn.execute(
+            "UPDATE users SET referral_by=? WHERE id=? AND referral_by IS NULL",
+            (referrer_id, user_id)
+        )
+        conn.commit()
+        return r.rowcount > 0
+
+
+def get_referral_stats(user_id: int) -> dict:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT referral_count, referral_banned FROM users WHERE id=?",
+            (user_id,)
+        ).fetchone()
+        return dict(row) if row else {"referral_count": 0, "referral_banned": 0}
+
+
+def increment_referral_count(referrer_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET referral_count=referral_count+1 WHERE id=?",
+            (referrer_id,)
+        )
+        conn.commit()
+
+
+def ban_referral(user_id: int):
+    """Ban fitur referral user karena terdeteksi bot/spam."""
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET referral_banned=1 WHERE id=?", (user_id,))
+        conn.commit()
+
+
+def is_referral_banned(user_id: int) -> bool:
+    with get_connection() as conn:
+        row = conn.execute("SELECT referral_banned FROM users WHERE id=?", (user_id,)).fetchone()
+        return bool(row["referral_banned"]) if row else False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRANSAKSI (RIWAYAT MUTASI)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_riwayat_mutasi(user_id: int, limit: int = 30) -> list:
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT * FROM transaksi WHERE user_id=?
+            ORDER BY created_at DESC LIMIT ?
+        """, (user_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BROADCAST
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def log_broadcast(admin_id: int, pesan: str, sukses: int, gagal: int):
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO broadcast_log(admin_id, pesan, sukses, gagal)
+            VALUES (?, ?, ?, ?)
+        """, (admin_id, pesan, sukses, gagal))
+        conn.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STATISTIK ADMIN
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_admin_stats() -> dict:
+    with get_connection() as conn:
+        total_user   = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+        total_saldo  = conn.execute("SELECT COALESCE(SUM(saldo),0) as s FROM users").fetchone()["s"]
+        total_trx    = conn.execute("SELECT COUNT(*) as c FROM pembelian").fetchone()["c"]
+        trx_hari_ini = conn.execute("""
+            SELECT COUNT(*) as c FROM pembelian
+            WHERE date(created_at)=date('now','localtime')
+        """).fetchone()["c"]
+        omset_total = conn.execute(
+            "SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian"
+        ).fetchone()["s"]
+        omset_hari  = conn.execute("""
+            SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian
+            WHERE date(created_at)=date('now','localtime')
+        """).fetchone()["s"]
+        garansi_pending = conn.execute(
+            "SELECT COUNT(*) as c FROM garansi WHERE status IN ('pending','diproses')"
+        ).fetchone()["c"]
+        topup_hari = conn.execute("""
+            SELECT COALESCE(SUM(jumlah),0) as s FROM topup
+            WHERE status='completed' AND date(created_at)=date('now','localtime')
+        """).fetchone()["s"]
+        stok_rows = conn.execute("""
+            SELECT p.nama, COUNT(CASE WHEN s.terjual=0 THEN 1 END) as tersedia
+            FROM paket_gmail p
+            LEFT JOIN stok_gmail s ON s.paket_id=p.id
+            WHERE p.aktif=1 GROUP BY p.id
+        """).fetchall()
+    return {
+        "total_user":      total_user,
+        "total_saldo":     total_saldo,
+        "total_trx":       total_trx,
+        "trx_hari_ini":    trx_hari_ini,
+        "omset_total":     omset_total,
+        "omset_hari_ini":  omset_hari,
+        "garansi_pending": garansi_pending,
+        "topup_hari_ini":  topup_hari,
+        "stok": [dict(r) for r in stok_rows],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION IN-MEMORY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_session(user_id: int) -> dict:
+    with _session_lock:
+        cached = _session_cache.get(user_id, {"state": None, "data": {}})
+        return {"state": cached["state"], "data": copy.deepcopy(cached["data"])}
+
+
+def set_session(user_id: int, state: str, data: dict):
+    from config import SESSION_CACHE_MAX_SIZE
+    with _session_lock:
+        if len(_session_cache) >= SESSION_CACHE_MAX_SIZE and user_id not in _session_cache:
+            evict = max(1, SESSION_CACHE_MAX_SIZE // 10)
+            for k in list(_session_cache.keys())[:evict]:
+                _session_cache.pop(k, None)
+        _session_cache[user_id] = {"state": state, "data": copy.deepcopy(data)}
+
+
+def clear_session(user_id: int):
+    with _session_lock:
+        _session_cache.pop(user_id, None)

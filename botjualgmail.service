@@ -1,0 +1,17 @@
+[Unit]
+Description=Bot Jual Gmail - Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/botjualgmail
+ExecStart=/usr/bin/python3 /opt/botjualgmail/main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

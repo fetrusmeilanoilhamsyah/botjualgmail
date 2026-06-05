@@ -1,0 +1,12 @@
+.env
+database/bot.db
+database/bot.db-wal
+database/bot.db-shm
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+logs/*.log
+*.bak
+.DS_Store
