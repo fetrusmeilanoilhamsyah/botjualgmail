@@ -245,10 +245,10 @@ def _seed_paket_default(conn):
     """Insert paket default pertama kali."""
     paket_default = [
         ("1 Akun Gmail",  1,  "Pembelian 1 akun Gmail fresh",  5000,  1, 1),
-        ("5 Akun Gmail",  5,  "Pembelian 5 akun Gmail fresh",  22000, 1, 2),
-        ("10 Akun Gmail", 10, "Pembelian 10 akun Gmail fresh", 40000, 1, 3),
-        ("20 Akun Gmail", 20, "Pembelian 20 akun Gmail fresh", 75000, 1, 4),
-        ("50 Akun Gmail", 50, "Pembelian 50 akun Gmail fresh", 170000, 1, 5),
+        ("5 Akun Gmail",  5,  "Pembelian 5 akun Gmail fresh",  25000, 1, 2),
+        ("10 Akun Gmail", 10, "Pembelian 10 akun Gmail fresh", 50000, 1, 3),
+        ("20 Akun Gmail", 20, "Pembelian 20 akun Gmail fresh", 100000, 1, 4),
+        ("50 Akun Gmail", 50, "Pembelian 50 akun Gmail fresh", 250000, 1, 5),
     ]
     conn.executemany(
         "INSERT INTO paket_gmail(nama, kuantitas, deskripsi, harga, aktif, urutan) VALUES(?,?,?,?,?,?)",

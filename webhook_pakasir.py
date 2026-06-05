@@ -182,15 +182,15 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
 
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🛒 Beli Gmail Sekarang", callback_data="beli_paket"),
-                    InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama"),
+                    InlineKeyboardButton("Beli Gmail Sekarang", callback_data="beli_paket", style="primary"),
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
 
                 notif_text = (
-                    f"✅ <b>Top Up Berhasil!</b>\n\n"
-                    f"💰 Nominal: <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
-                    f"💳 Saldo sekarang: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n\n"
-                    "Yuk, beli akun Gmail sekarang! 🚀"
+                    f"<b>Top Up Berhasil!</b>\n\n"
+                    f"Nominal: <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
+                    f"Saldo sekarang: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n\n"
+                    "Yuk, beli akun Gmail sekarang!"
                 )
 
                 try:

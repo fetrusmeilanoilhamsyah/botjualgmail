@@ -16,8 +16,6 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-PAKASIR_BASE = "https://app.pakasir.com/api/v1"
-
 
 def fmt_rupiah(n: int) -> str:
     return f"Rp {n:,.0f}".replace(",", ".")
@@ -26,28 +24,43 @@ def fmt_rupiah(n: int) -> str:
 def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None:
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
-    url = f"{PAKASIR_BASE}/order"
-    headers = {
-        "Authorization": f"Bearer {PAKASIR_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    url = "https://app.pakasir.com/api/transactioncreate/qris"
     payload = {
-        "order_id":    order_id,
-        "amount":      amount,
-        "description": f"Top Up Saldo - User {user_id}",
-        "project":     PAKASIR_SLUG,
-        "sandbox":     PAKASIR_SANDBOX,
+        "project":  PAKASIR_SLUG,
+        "api_key":  PAKASIR_API_KEY,
+        "order_id": order_id,
+        "amount":   amount,
     }
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        resp = requests.post(url, json=payload, timeout=10)
         data = resp.json()
-        if resp.status_code in (200, 201) and data.get("data"):
-            return data["data"]
+        if resp.status_code == 200 and data.get("payment"):
+            return data["payment"]
         logger.error("[topup] Pakasir error: %s", data)
         return None
     except Exception as e:
         logger.error("[topup] Pakasir request gagal: %s", e)
+        return None
+
+
+def _cek_status_pakasir(order_id: str, amount: int) -> dict | None:
+    if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
+        return None
+    url = "https://app.pakasir.com/api/transactiondetail"
+    params = {
+        "project":  PAKASIR_SLUG,
+        "api_key":  PAKASIR_API_KEY,
+        "order_id": order_id,
+        "amount":   amount,
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+        if resp.status_code == 200 and data.get("transaction"):
+            return data["transaction"]
+        return None
+    except Exception as e:
+        logger.error("[topup] Pakasir status check gagal: %s", e)
         return None
 
 
@@ -144,11 +157,9 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
     is_callback = update.callback_query is not None
 
     if is_callback:
-        # Edit message dari button click
         msg = update.callback_query.message
         await msg.edit_text("Membuatkan QR Code... Mohon tunggu.")
     else:
-        # Kirim message baru dari text input
         msg = await update.message.reply_text("Membuatkan QR Code... Mohon tunggu.")
 
     # Buat order Pakasir
@@ -213,7 +224,20 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text("Data topup tidak ditemukan.")
         return
 
-    if topup["status"] == "completed":
+    status = topup["status"]
+
+    if status == "pending":
+        txn = _cek_status_pakasir(order_id, topup["jumlah"])
+        if txn and txn.get("status") == "completed":
+            was_updated = db.complete_topup_if_pending(order_id)
+            if was_updated:
+                result = db.tambah_saldo(topup["user_id"], topup["jumlah"], "topup", "Top up via QRIS", ref_id=order_id)
+                status = "completed"
+        elif txn and txn.get("status") in ("expired", "cancelled"):
+            status = txn.get("status")
+            db.update_topup_status(order_id, status)
+
+    if status == "completed":
         saldo = db.get_saldo(topup["user_id"])
         await q.edit_message_text(
             f"Top Up Berhasil!\n\n"
@@ -224,13 +248,13 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
             ]])
         )
-    elif topup["status"] == "expired":
+    elif status == "expired":
         await q.edit_message_text(
             "Pembayaran Kadaluarsa\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
-                InlineKeyboardButton("Menu", callback_data="menu_utama", style="danger"),
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
             ]])
         )
     else:

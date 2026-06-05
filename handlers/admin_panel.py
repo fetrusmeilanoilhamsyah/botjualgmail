@@ -46,7 +46,6 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="primary"),
-            InlineKeyboardButton("Isi Saldo User",      callback_data="admin_isi_saldo", style="primary"),
         ],
         [InlineKeyboardButton("Menu Utama Bot",         callback_data="menu_utama", style="danger")],
     ]

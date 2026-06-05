@@ -72,14 +72,14 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Riwayat Mutasi", callback_data="riwayat_mutasi", style="primary"),
         ],
         [
-            InlineKeyboardButton("Chat Admin", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}", style="primary"),
-            InlineKeyboardButton("Info Akun",  callback_data="info_akun", style="primary"),
+            InlineKeyboardButton("Chat Admin", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}", style="danger"),
+            InlineKeyboardButton("Info Akun",  callback_data="info_akun", style="danger"),
         ],
     ]
 
     if is_admin:
         keyboard.append([
-            InlineKeyboardButton("PANEL ADMIN", callback_data="admin_panel", style="primary"),
+            InlineKeyboardButton("PANEL ADMIN", callback_data="admin_panel", style="danger"),
         ])
 
     markup = InlineKeyboardMarkup(keyboard)
