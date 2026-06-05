@@ -13,7 +13,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
-from config import ADMIN_CONTACT, ADMIN_NOTIF_CHAT
+from config import ADMIN_CONTACT, ADMIN_NOTIF_CHATS
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,11 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Alasan: {alasan}\n\n"
             f"Gunakan /garansi_list untuk melihat semua klaim."
         )
-        await ctx.bot.send_message(chat_id=ADMIN_NOTIF_CHAT, text=notif, parse_mode="HTML")
+        for chat_id in ADMIN_NOTIF_CHATS:
+            try:
+                await ctx.bot.send_message(chat_id=chat_id, text=notif, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("[garansi] Gagal notif admin %d: %s", chat_id, e)
     except Exception as e:
         logger.debug("[garansi] Gagal notif admin: %s", e)
 

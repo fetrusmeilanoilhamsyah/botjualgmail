@@ -37,7 +37,23 @@ TOPUP_MIN = int(os.getenv("TOPUP_MIN", 1000))
 TOPUP_MAX = int(os.getenv("TOPUP_MAX", 1000000))
 
 # ─── NOTIFIKASI ───────────────────────────────────────────────────────────────
-ADMIN_NOTIF_CHAT = int(os.getenv("ADMIN_NOTIF_CHAT", ADMIN_IDS[0] if ADMIN_IDS else 0))
+# Notifikasi admin dikirim ke list ID chat ini (bisa koma untuk banyak ID)
+ADMIN_NOTIF_CHAT_RAW = os.getenv("ADMIN_NOTIF_CHAT", "")
+if ADMIN_NOTIF_CHAT_RAW:
+    ADMIN_NOTIF_CHATS = list(map(int, ADMIN_NOTIF_CHAT_RAW.split(",")))
+else:
+    ADMIN_NOTIF_CHATS = ADMIN_IDS
+
+ADMIN_NOTIF_CHAT = ADMIN_NOTIF_CHATS[0] if ADMIN_NOTIF_CHATS else 0
+
+# ─── LIVE TRANSACTION FEED ───────────────────────────────────────────────────
+CHANNEL_LIVE_TX_RAW = os.getenv("CHANNEL_LIVE_TX", "").strip()
+if not CHANNEL_LIVE_TX_RAW:
+    CHANNEL_LIVE_TX = None
+elif CHANNEL_LIVE_TX_RAW.startswith("-") or CHANNEL_LIVE_TX_RAW.isdigit():
+    CHANNEL_LIVE_TX = int(CHANNEL_LIVE_TX_RAW)
+else:
+    CHANNEL_LIVE_TX = CHANNEL_LIVE_TX_RAW
 
 # ─── LOCAL TELEGRAM BOT API (TELELOKAL) ──────────────────────────────────────
 # Share telelokal yang sama dengan botcv (port 8082)

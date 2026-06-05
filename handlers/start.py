@@ -46,8 +46,8 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     is_admin = user.id in ADMIN_IDS
 
     teks = (
-        f"               <b>« G M A I L   S T O R E »</b>\n\n"
-        f"Halo <b>{user.first_name}</b>! Selamat datang di Gmail Store.\n"
+        f"               <b>« WARUNG GMAIL »</b>\n\n"
+        f"Halo <b>{user.first_name}</b>! Selamat datang di Warung Gmail.\n"
         f"Penyedia akun Gmail berkualitas, fresh, dan bergaransi 24 jam.\n\n"
         f"<b>STATISTIK TOKO</b>\n"
         f"• Akun Terjual : <b>{stats['akun_terjual']:,} Akun</b>\n"
@@ -57,6 +57,8 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"• Saldo: <b>{fmt_rupiah(saldo)}</b>\n\n"
         f"Silakan pilih menu di bawah ini:"
     )
+
+    admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
 
     keyboard = [
         [
@@ -71,11 +73,21 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Riwayat Beli",   callback_data="riwayat_beli", style="primary"),
             InlineKeyboardButton("Riwayat Mutasi", callback_data="riwayat_mutasi", style="primary"),
         ],
-        [
-            InlineKeyboardButton("Chat Admin", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}", style="danger"),
-            InlineKeyboardButton("Info Akun",  callback_data="info_akun", style="danger"),
-        ],
     ]
+
+    contact_row = []
+    if len(admin_contacts) == 1:
+        contact_row.append(InlineKeyboardButton("Chat Admin", url=f"https://t.me/{admin_contacts[0].lstrip('@')}", style="danger"))
+    else:
+        for idx, contact in enumerate(admin_contacts, 1):
+            contact_row.append(InlineKeyboardButton(f"Chat Admin {idx}", url=f"https://t.me/{contact.lstrip('@')}", style="danger"))
+
+    if len(contact_row) == 1:
+        contact_row.append(InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger"))
+        keyboard.append(contact_row)
+    else:
+        keyboard.append(contact_row)
+        keyboard.append([InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger")])
 
     if is_admin:
         keyboard.append([
@@ -181,6 +193,29 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
         )
     except Exception as e:
         logger.debug("[referral] Gagal notif referrer %d: %s", referrer_id, e)
+
+    # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+    try:
+        from handlers.live_tx import send_live_tx, censor_name, censor_id
+        
+        ref_user = db.get_user(referrer_id)
+        referrer_name = ref_user["full_name"] if ref_user else "Admin"
+        
+        c_ref_name = censor_name(new_user.full_name or str(new_user.id))
+        c_ref_id = censor_id(new_user.id)
+        c_referrer_name = censor_name(referrer_name)
+        c_referrer_id = censor_id(referrer_id)
+        
+        live_teks = (
+            "LIVE REFERRAL\n\n"
+            f"Teman bergabung: {c_ref_name} [{c_ref_id}]\n"
+            f"Pengundang: {c_referrer_name} [{c_referrer_id}]\n"
+            f"Bonus: Rp {REFERRAL_BONUS:,}\n"
+            "Status: Sukses"
+        )
+        await send_live_tx(ctx.bot, live_teks)
+    except Exception as e:
+        logger.warning("[referral] Gagal kirim live tx: %s", e)
 
 
 def register(app):

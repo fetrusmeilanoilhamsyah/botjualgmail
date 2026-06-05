@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
-from config import ADMIN_CONTACT, ADMIN_NOTIF_CHAT
+from config import ADMIN_CONTACT, ADMIN_NOTIF_CHATS
 
 logger = logging.getLogger(__name__)
 
@@ -294,9 +294,29 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Total Harga: {fmt_rupiah(total_harga)}\n"
             f"ID: #{pembelian_id}"
         )
-        await ctx.bot.send_message(chat_id=ADMIN_NOTIF_CHAT, text=notif, parse_mode="HTML")
+        for chat_id in ADMIN_NOTIF_CHATS:
+            try:
+                await ctx.bot.send_message(chat_id=chat_id, text=notif, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("[beli] Gagal notif admin %d: %s", chat_id, e)
     except Exception as e:
         logger.debug("[beli] Gagal notif admin: %s", e)
+
+    # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+    try:
+        from handlers.live_tx import send_live_tx, censor_name, censor_id
+        c_name = censor_name(user.full_name)
+        c_uid = censor_id(user.id)
+        live_teks = (
+            "LIVE PEMBELIAN\n\n"
+            f"Kuantitas: {qty} Akun Gmail\n"
+            f"Total Harga: {fmt_rupiah(total_harga)}\n"
+            f"User: {c_name} [{c_uid}]\n"
+            "Status: Sukses"
+        )
+        await send_live_tx(ctx.bot, live_teks)
+    except Exception as e:
+        logger.warning("[beli] Gagal kirim live tx: %s", e)
 
 
 async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -397,9 +417,29 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Harga: {fmt_rupiah(paket['harga'])}\n"
             f"ID: #{pembelian_id}"
         )
-        await ctx.bot.send_message(chat_id=ADMIN_NOTIF_CHAT, text=notif, parse_mode="HTML")
+        for chat_id in ADMIN_NOTIF_CHATS:
+            try:
+                await ctx.bot.send_message(chat_id=chat_id, text=notif, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("[beli] Gagal notif admin %d: %s", chat_id, e)
     except Exception as e:
         logger.debug("[beli] Gagal notif admin: %s", e)
+
+    # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+    try:
+        from handlers.live_tx import send_live_tx, censor_name, censor_id
+        c_name = censor_name(user.full_name)
+        c_uid = censor_id(user.id)
+        live_teks = (
+            "LIVE PEMBELIAN\n\n"
+            f"Paket: {paket['nama']}\n"
+            f"Total Harga: {fmt_rupiah(paket['harga'])}\n"
+            f"User: {c_name} [{c_uid}]\n"
+            "Status: Sukses"
+        )
+        await send_live_tx(ctx.bot, live_teks)
+    except Exception as e:
+        logger.warning("[beli] Gagal kirim live tx: %s", e)
 
 
 def _format_akun(akun_list: list) -> str:

@@ -11,7 +11,7 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from database import db
 from config import (
     PAKASIR_ENABLED, PAKASIR_SLUG, PAKASIR_API_KEY,
-    PAKASIR_SANDBOX, TOPUP_MIN, TOPUP_MAX
+    PAKASIR_SANDBOX, TOPUP_MIN, TOPUP_MAX, ADMIN_CONTACT
 )
 
 logger = logging.getLogger(__name__)
@@ -81,13 +81,26 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("Rp 10.000 (10k)", callback_data="topup_nominal:10000", style="primary"),
+            InlineKeyboardButton("Rp 15.000 (15k)", callback_data="topup_nominal:15000", style="primary"),
+        ],
+        [
             InlineKeyboardButton("Rp 20.000 (20k)", callback_data="topup_nominal:20000", style="primary"),
+            InlineKeyboardButton("Rp 25.000 (25k)", callback_data="topup_nominal:25000", style="primary"),
         ],
         [
+            InlineKeyboardButton("Rp 30.000 (30k)", callback_data="topup_nominal:30000", style="primary"),
             InlineKeyboardButton("Rp 50.000 (50k)", callback_data="topup_nominal:50000", style="primary"),
-            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary")
         ],
         [
+            InlineKeyboardButton("Rp 100.000 (100k)", callback_data="topup_nominal:100000", style="primary"),
+            InlineKeyboardButton("Rp 200.000 (200k)", callback_data="topup_nominal:200000", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("Rp 500.000 (500k)", callback_data="topup_nominal:500000", style="primary"),
+            InlineKeyboardButton("Rp 1.000.000 (1 Jt)", callback_data="topup_nominal:1000000", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary"),
             InlineKeyboardButton("Batal", callback_data="menu_utama", style="danger")
         ]
     ]
@@ -234,7 +247,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
             f"Nominal: <b>{fmt_rupiah(amount)}</b>\n"
             f"Order ID: <code>{order_id}</code>\n\n"
             "Hubungi admin untuk melakukan top up manual.\n"
-            f"Admin: @{ctx.bot_data.get('admin_contact', 'admin')}"
+            f"Admin: {ADMIN_CONTACT}"
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         
@@ -280,6 +293,24 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             if was_updated:
                 result = db.tambah_saldo(topup["user_id"], topup["jumlah"], "topup", "Top up via QRIS", ref_id=order_id)
                 status = "completed"
+                
+                # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+                try:
+                    from handlers.live_tx import send_live_tx, censor_name, censor_id
+                    u = db.get_user(topup["user_id"])
+                    c_name = censor_name(u["full_name"] if u else "Pengguna")
+                    c_uid = censor_id(topup["user_id"])
+                    
+                    live_teks = (
+                        "LIVE TOP UP\n\n"
+                        f"Nominal: {fmt_rupiah(topup['jumlah'])}\n"
+                        f"Metode: QRIS Otomatis\n"
+                        f"User: {c_name} [{c_uid}]\n"
+                        "Status: Sukses"
+                    )
+                    await send_live_tx(ctx.bot, live_teks)
+                except Exception as e:
+                    logger.warning("[topup] Gagal kirim live tx: %s", e)
         elif txn and txn.get("status") in ("expired", "cancelled"):
             status = txn.get("status")
             db.update_topup_status(order_id, status)

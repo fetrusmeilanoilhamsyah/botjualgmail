@@ -207,6 +207,34 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 except Exception as e:
                     logger.warning("[Webhook-gmail] Gagal notif user: %s", e)
 
+                # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+                try:
+                    from config import CHANNEL_LIVE_TX
+                    from handlers.live_tx import censor_name, censor_id
+                    user_row = db.get_user(topup["user_id"])
+                    c_name = censor_name(user_row["full_name"] if user_row else "Pengguna")
+                    c_uid = censor_id(topup["user_id"])
+                    
+                    live_teks = (
+                        "LIVE TOP UP\n\n"
+                        f"Nominal: {fmt_rupiah(topup['jumlah'])}\n"
+                        f"Metode: QRIS Otomatis\n"
+                        f"User: {c_name} [{c_uid}]\n"
+                        "Status: Sukses"
+                    )
+                    if bot and CHANNEL_LIVE_TX:
+                        if main_loop and main_loop.is_running():
+                            asyncio.run_coroutine_threadsafe(
+                                bot.send_message(
+                                    chat_id=CHANNEL_LIVE_TX,
+                                    text=live_teks,
+                                    parse_mode="HTML"
+                                ),
+                                main_loop
+                            )
+                except Exception as e:
+                    logger.warning("[Webhook-gmail] Gagal kirim live tx: %s", e)
+
         else:
             # expired / cancelled
             await loop.run_in_executor(None, db.update_topup_status, order_id, status)
