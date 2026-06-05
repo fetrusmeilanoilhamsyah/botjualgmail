@@ -17,6 +17,23 @@ def fmt_rupiah(n: int) -> str:
     return f"Rp {n:,.0f}".replace(",", ".")
 
 
+def fmt_short_rupiah(n: int) -> str:
+    if n >= 1000000:
+        val = n / 1000000
+        if val.is_integer():
+            return f"{int(val)} Jt"
+        return f"{val:,.1f}".replace(".", ",").replace(",0", "") + " Jt"
+    elif n >= 1000:
+        val = n / 1000
+        if val.is_integer():
+            return f"{int(val)}K"
+        formatted = f"{val:,.1f}".replace(".", ",")
+        if formatted.endswith(",0"):
+            formatted = formatted[:-2]
+        return f"{formatted}K"
+    return str(n)
+
+
 def fmt_dt(iso_str: str) -> str:
     """Format ISO datetime ke string cantik."""
     try:
@@ -33,7 +50,6 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await q.answer()
 
-    # Halaman dari callback data (riwayat_beli:2 → halaman 2)
     parts = q.data.split(":")
     page  = int(parts[1]) if len(parts) > 1 else 0
 
@@ -41,8 +57,8 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if not riwayat:
         await q.edit_message_text(
-            "<b>Riwayat Pembelian</b>\n\n"
-            "Kamu belum pernah melakukan pembelian.",
+            "<b>Riwayat Pembelian - Warung Gmail</b>\n\n"
+            "Anda belum pernah melakukan pembelian akun.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="primary"),
@@ -56,18 +72,18 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     end     = min(start + PAGE_SIZE, total)
     items   = riwayat[start:end]
 
-    teks = f"<b>Riwayat Pembelian</b> (hal. {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
+    teks = f"<b>Riwayat Pembelian</b> (Halaman {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
 
     kb = []
     for r in items:
         status_text = {"aktif": "[Aktif]", "klaim_garansi": "[Garansi]", "selesai": "[Selesai]"}.get(r["status"], "[Selesai]")
         teks += (
-            f"{status_text} <b>#{r['id']}</b> – {r['paket_nama']}\n"
-            f"   Harga: {fmt_rupiah(r['harga_bayar'])}  |  Tanggal: {fmt_dt(r['created_at'])}\n"
-            f"   Garansi: {fmt_dt(r['garansi_until'])}  |  Status: {r['status']}\n"
+            f"<b>{status_text} #{r['id']}</b> – {r['paket_nama']}\n"
+            f"   Harga: {fmt_short_rupiah(r['harga_bayar'])} | Tanggal: {fmt_dt(r['created_at'])}\n"
+            f"   Garansi s/d: {fmt_dt(r['garansi_until'])}\n\n"
         )
         kb.append([InlineKeyboardButton(
-            f"Lihat Akun #{r['id']}",
+            f"Lihat Data Akun #{r['id']}",
             callback_data=f"lihat_akun:{r['id']}",
             style="primary"
         )])
@@ -101,12 +117,12 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     teks = (
         f"<b>Detail Pesanan #{pembelian_id}</b>\n"
         f"Paket: {detail['paket_nama']}\n"
-        f"Harga: {fmt_rupiah(detail['harga_bayar'])}\n"
+        f"Total Bayar: {fmt_short_rupiah(detail['harga_bayar'])} ({fmt_rupiah(detail['harga_bayar'])})\n"
         f"Tanggal: {fmt_dt(detail['created_at'])}\n"
         f"Garansi s/d: {fmt_dt(detail['garansi_until'])}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "<b>DATA AKUN GMAIL:</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>DATA AKUN GMAIL</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
     )
 
     for i, a in enumerate(akun_list, 1):
@@ -157,7 +173,7 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if not mutasi:
         await q.edit_message_text(
-            "<b>Riwayat Mutasi</b>\n\nBelum ada transaksi.",
+            "<b>Riwayat Mutasi - Warung Gmail</b>\n\nBelum ada riwayat transaksi.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
@@ -170,15 +186,15 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     end   = min(start + PAGE_SIZE, total)
     items = mutasi[start:end]
 
-    teks = f"<b>Riwayat Mutasi</b> (hal. {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
+    teks = f"<b>Riwayat Mutasi Saldo</b> (Halaman {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
     for m in items:
         label_tipe = TIPE_TEXT.get(m["tipe"], "[Mutasi]")
         masuk   = m["jumlah"] > 0
         sign    = "+" if masuk else "-"
         teks += (
-            f"{label_tipe} <b>{sign}{fmt_rupiah(abs(m['jumlah']))}</b>\n"
+            f"<b>{label_tipe} {sign}{fmt_short_rupiah(abs(m['jumlah']))}</b> ({fmt_rupiah(abs(m['jumlah']))})\n"
             f"   Keterangan: {m['keterangan']}\n"
-            f"   Tanggal: {fmt_dt(m['created_at'])}  |  Saldo: {fmt_rupiah(m['saldo_sesudah'])}\n\n"
+            f"   Tanggal: {fmt_dt(m['created_at'])} | Saldo: {fmt_rupiah(m['saldo_sesudah'])}\n\n"
         )
 
     nav = []

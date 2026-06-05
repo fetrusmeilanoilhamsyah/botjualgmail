@@ -49,7 +49,7 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    teks = "<b>Klaim Garansi</b>\n\nPilih pembelian yang ingin diklaim:\n"
+    teks = "<b>Klaim Garansi</b>\n\nPilih invoice pembelian yang ingin diklaim:"
     kb   = []
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
@@ -91,15 +91,14 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    db.set_session(user.id, "waiting_garansi_alasan", {"pembelian_id": pembelian_id})
+    db.set_session(user.id, "waiting_garansi_alasan", {"pembelian_id": pembelian_id, "menu_msg_id": q.message.message_id})
 
     teks = (
-        f"<b>Klaim Garansi</b>\n\n"
-        f"Paket: <b>{detail['paket_nama']}</b>\n"
-        f"ID Pesanan: #{pembelian_id}\n\n"
-        "Jelaskan masalah yang kamu alami:\n"
-        "(contoh: akun tidak bisa login, password salah, dll)\n\n"
-        "Ketik alasanmu:"
+        f"<b>Klaim Garansi - Invoice #{pembelian_id}</b>\n\n"
+        f"Item: <b>{detail['paket_nama']}</b>\n\n"
+        "Silakan jelaskan kendala atau detail kerusakan akun yang Anda alami:\n"
+        "(Contoh: Akun salah sandi, butuh verifikasi nomor, dll)\n\n"
+        "Ketik alasan klaim:"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -112,41 +111,75 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if session["state"] != "waiting_garansi_alasan":
         return
 
+    # Hapus pesan input user
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     alasan       = update.message.text.strip()
     pembelian_id = session["data"]["pembelian_id"]
+    menu_msg_id  = session["data"].get("menu_msg_id")
     db.clear_session(user.id)
 
     if len(alasan) < 5:
-        await update.message.reply_text(
-            "Alasan terlalu singkat. Tolong jelaskan masalah yang kamu alami."
-        )
+        teks_err = "<b>Alasan terlalu singkat!</b>\n\nJelaskan kendala Anda secara lebih detail (min 5 karakter):"
+        kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
+        
+        # Simpan kembali session dengan menu_msg_id
+        db.set_session(user.id, "waiting_garansi_alasan", {"pembelian_id": pembelian_id, "menu_msg_id": menu_msg_id})
+        
+        if menu_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+                )
+                return
+            except Exception:
+                pass
+        await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
     garansi_id = db.create_garansi(pembelian_id, user.id, alasan)
 
     if garansi_id is None:
-        await update.message.reply_text(
-            "Gagal membuat klaim garansi.\n"
-            "Kemungkinan:\n"
-            "• Garansi sudah kadaluarsa\n"
-            "• Sudah ada klaim aktif untuk pesanan ini\n"
-            "• Pesanan tidak ditemukan\n\n"
-            f"Hubungi admin: {ADMIN_CONTACT}"
+        teks_fail = (
+            "<b>Klaim Garansi Gagal</b>\n\n"
+            "Gagal membuat klaim garansi karena kemungkinan:\n"
+            "• Garansi pembelian ini sudah kadaluarsa (melebihi 24 jam)\n"
+            "• Sudah ada pengajuan klaim aktif untuk pesanan ini\n\n"
+            f"Silakan hubungi admin jika ada kendala: {ADMIN_CONTACT}"
         )
+        kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
+        if menu_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=user.id, message_id=menu_msg_id, text=teks_fail, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+                )
+                return
+            except Exception:
+                pass
+        await ctx.bot.send_message(chat_id=user.id, text=teks_fail, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    await update.message.reply_text(
-        f"<b>Klaim Garansi Terkirim!</b>\n\n"
-        f"ID Klaim: #{garansi_id}\n"
-        f"ID Pesanan: #{pembelian_id}\n"
+    teks_success = (
+        f"<b>Klaim Garansi Terkirim</b>\n\n"
+        f"No. Klaim: <code>#{garansi_id}</code>\n"
+        f"No. Invoice: <code>#{pembelian_id}</code>\n"
         f"Alasan: {alasan}\n\n"
-        "Admin akan memproses klaim kamu segera.\n"
-        f"Jika mendesak, hubungi: {ADMIN_CONTACT}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
-        ]])
+        "Pengajuan klaim Anda telah dicatat. Admin kami akan segera memproses penggantian akun.\n"
+        f"Hubungi admin jika mendesak: {ADMIN_CONTACT}"
     )
+    kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")]]
+    if menu_msg_id:
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=user.id, message_id=menu_msg_id, text=teks_success, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+            )
+            return
+        except Exception:
+            pass
+    await ctx.bot.send_message(chat_id=user.id, text=teks_success, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
     # Notif admin
     try:

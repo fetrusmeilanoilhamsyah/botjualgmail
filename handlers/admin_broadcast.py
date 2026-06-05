@@ -5,7 +5,7 @@ Commands: /broadcast
 import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
 from database import db
 from middleware.auth import admin_only
@@ -18,17 +18,22 @@ logger = logging.getLogger(__name__)
 async def cmd_broadcast_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Mulai proses broadcast."""
     user = update.effective_user
-    db.set_session(user.id, "admin_broadcast_preview", {})
+
+    # Hapus pesan command admin
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
 
     teks = (
-        "Broadcast Pesan\n\n"
-        "Ketik pesan yang ingin dikirim ke semua user.\n"
-        "Mendukung: HTML bold, italic, kode.\n\n"
-        "Contoh:\n"
-        "<code>Halo semua! Ada promo stok baru hari ini</code>"
+        "<b>Broadcast Pesan - Warung Gmail</b>\n\n"
+        "Ketik pesan yang ingin dikirim ke seluruh pengguna.\n"
+        "Mendukung tag HTML seperti: <b>tebal</b>, <i>miring</i>, <code>kode</code>.\n\n"
+        "Silakan ketik pesan Anda:"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
-    await update.message.reply_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    msg = await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    db.set_session(user.id, "admin_broadcast_preview", {"menu_msg_id": msg.message_id})
 
 
 @admin_only
@@ -39,33 +44,63 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     if session["state"] != "admin_broadcast_preview":
         return
 
+    # Hapus pesan input admin
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     pesan = update.message.text.strip()
-    db.set_session(user.id, "admin_broadcast_confirm", {"pesan": pesan})
+    menu_msg_id = session["data"].get("menu_msg_id")
+
+    db.set_session(user.id, "admin_broadcast_confirm", {"pesan": pesan, "menu_msg_id": menu_msg_id})
 
     total_user = db.get_total_users()
     preview = (
-        f"Preview Broadcast\n\n"
+        f"<b>Preview Broadcast - Warung Gmail</b>\n\n"
         f"{'─'*30}\n"
         f"{pesan}\n"
         f"{'─'*30}\n\n"
-        f"Akan dikirim ke: <b>{total_user} user</b>\n\n"
-        "Kirim broadcast?"
+        f"Target Penerima: <b>{total_user} User</b>\n\n"
+        "Kirim broadcast sekarang?"
     )
     kb = [
         [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="primary")],
         [InlineKeyboardButton("Edit Ulang",         callback_data="admin_broadcast_reedit", style="danger")],
         [InlineKeyboardButton("Batal",              callback_data="admin_panel", style="danger")],
     ]
-    await update.message.reply_text(preview, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+
+    if menu_msg_id:
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=user.id,
+                message_id=menu_msg_id,
+                text=preview,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+            return
+        except Exception:
+            pass
+
+    msg = await ctx.bot.send_message(
+        chat_id=user.id,
+        text=preview,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    db.set_session(user.id, "admin_broadcast_confirm", {"pesan": pesan, "menu_msg_id": msg.message_id})
 
 
 @admin_only
 async def admin_broadcast_reedit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    db.set_session(update.effective_user.id, "admin_broadcast_preview", {})
+    
+    user = update.effective_user
+    db.set_session(user.id, "admin_broadcast_preview", {"menu_msg_id": q.message.message_id})
     await q.edit_message_text(
-        "Ketik ulang pesan broadcast:",
+        "Ketik ulang pesan broadcast Anda:",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]])
     )
 
@@ -86,6 +121,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         return
 
     pesan = session["data"]["pesan"]
+    menu_msg_id = session["data"].get("menu_msg_id")
     db.clear_session(user.id)
 
     user_ids  = db.get_all_user_ids()
@@ -93,7 +129,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     sukses    = 0
     gagal     = 0
 
-    await q.edit_message_text(f"Mengirim ke {total} user...\n\nMohon tunggu.")
+    await q.edit_message_text(f"Mengirim pesan ke {total} user...\n\nMohon tunggu proses selesai.")
 
     for uid in user_ids:
         try:
@@ -106,16 +142,27 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     db.log_broadcast(user.id, pesan, sukses, gagal)
 
-    await q.message.reply_text(
-        f"Broadcast Selesai!\n\n"
-        f"Berhasil: {sukses} user\n"
-        f"Gagal   : {gagal} user\n"
-        f"Total   : {total} user",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")
-        ]])
+    teks_selesai = (
+        f"<b>Broadcast Selesai!</b>\n\n"
+        f"• Sukses: {sukses} user\n"
+        f"• Gagal: {gagal} user\n"
+        f"• Total: {total} user"
     )
+    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
+
+    if menu_msg_id:
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=user.id,
+                message_id=menu_msg_id,
+                text=teks_selesai,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+            return
+        except Exception:
+            pass
+    await q.edit_message_text(teks_selesai, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
 def register(app):

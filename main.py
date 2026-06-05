@@ -138,9 +138,9 @@ def main():
     async def admin_isi_saldo_start(update, ctx):
         q = update.callback_query
         await q.answer()
-        db.set_session(update.effective_user.id, "admin_isi_saldo", {})
+        db.set_session(update.effective_user.id, "admin_isi_saldo", {"menu_msg_id": q.message.message_id})
         await q.edit_message_text(
-            "Isi Saldo User\n\n"
+            "<b>Isi Saldo User - Warung Gmail</b>\n\n"
             "Format: <code>USER_ID JUMLAH KETERANGAN</code>\n\n"
             "Contoh: <code>1234567 50000 Bonus admin</code>",
             parse_mode="HTML",
@@ -159,6 +159,14 @@ def main():
         session = db.get_session(user.id)
         if session["state"] != "admin_isi_saldo":
             return
+
+        # Hapus input text admin
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        menu_msg_id = session["data"].get("menu_msg_id")
         db.clear_session(user.id)
         try:
             parts = update.message.text.strip().split(maxsplit=2)
@@ -166,15 +174,38 @@ def main():
             jml   = int(parts[1])
             ket   = parts[2] if len(parts) > 2 else "Manual admin"
         except (ValueError, IndexError):
-            await update.message.reply_text("Format salah. Contoh: <code>1234567 50000 Bonus</code>", parse_mode="HTML")
+            teks_err = "Format salah. Contoh: <code>1234567 50000 Bonus</code>"
+            kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
+            if menu_msg_id:
+                try:
+                    await ctx.bot.edit_message_text(
+                        chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+                    )
+                    return
+                except Exception:
+                    pass
+            await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
             return
+
         result = db.tambah_saldo(uid, jml, "manual", ket, ref_id=f"admin_{user.id}")
-        await update.message.reply_text(
+        teks_res = (
             f"Saldo berhasil ditambahkan!\n\n"
             f"User ID: {uid}\n"
             f"Ditambah: Rp {jml:,}\n"
             f"Saldo baru: Rp {result['saldo_sesudah']:,}"
         )
+        kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
+
+        if menu_msg_id:
+            try:
+                await ctx.bot.edit_message_text(
+                    chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb)
+                )
+            except Exception:
+                await ctx.bot.send_message(chat_id=user.id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
+        else:
+            await ctx.bot.send_message(chat_id=user.id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
+
         try:
             await ctx.bot.send_message(
                 chat_id=uid,
@@ -182,6 +213,7 @@ def main():
             )
         except Exception:
             pass
+
 
     # ── Centralized Routers ──────────────────────────────────────────────────
     async def central_text_router(update, ctx):

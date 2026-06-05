@@ -19,6 +19,11 @@ def fmt_rupiah(n: int) -> str:
 
 @admin_only
 async def cmd_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    # Hapus pesan command admin
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
     await _show_garansi_list(update, ctx)
 
 
@@ -53,16 +58,16 @@ async def _show_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )])
         kb.append([InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")])
 
-    target = update.message if update.message else update.callback_query.message
+    user_id = update.effective_user.id
     if update.callback_query:
         try:
             await update.callback_query.edit_message_text(
                 teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
             )
         except Exception:
-            await target.reply_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+            await ctx.bot.send_message(chat_id=user_id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
     else:
-        await target.reply_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+        await ctx.bot.send_message(chat_id=user_id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -190,7 +195,7 @@ async def cb_tolak_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     garansi_id = int(q.data.split(":", 1)[1])
     await q.answer()
 
-    db.set_session(update.effective_user.id, "admin_tolak_garansi_alasan", {"garansi_id": garansi_id})
+    db.set_session(update.effective_user.id, "admin_tolak_garansi_alasan", {"garansi_id": garansi_id, "menu_msg_id": q.message.message_id})
     await q.edit_message_text(
         f"<b>Tolak Klaim Garansi #{garansi_id}</b>\n\n"
         "Ketik alasan penolakan (akan dikirim ke user):",
@@ -201,13 +206,21 @@ async def cb_tolak_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@admin_only
 async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user    = update.effective_user
     session = db.get_session(user.id)
     if session["state"] != "admin_tolak_garansi_alasan":
         return
 
+    # Hapus input pesan alasan admin
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     garansi_id = session["data"]["garansi_id"]
+    menu_msg_id = session["data"].get("menu_msg_id")
     alasan     = update.message.text.strip()
     db.clear_session(user.id)
 
@@ -232,12 +245,21 @@ async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
-    await update.message.reply_text(
-        f"Klaim #{garansi_id} ditolak dan user sudah dinotifikasi.",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="danger")
-        ]])
-    )
+    teks_hasil = f"Klaim #{garansi_id} ditolak dan user sudah dinotifikasi."
+    kb = [[InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="danger")]]
+    
+    if menu_msg_id:
+        try:
+            await ctx.bot.edit_message_text(
+                chat_id=user.id,
+                message_id=menu_msg_id,
+                text=teks_hasil,
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+            return
+        except Exception:
+            pass
+    await ctx.bot.send_message(chat_id=user.id, text=teks_hasil, reply_markup=InlineKeyboardMarkup(kb))
 
 
 def register(app):
