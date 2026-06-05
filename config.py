@@ -39,6 +39,12 @@ TOPUP_MAX = int(os.getenv("TOPUP_MAX", 1000000))
 # ─── NOTIFIKASI ───────────────────────────────────────────────────────────────
 ADMIN_NOTIF_CHAT = int(os.getenv("ADMIN_NOTIF_CHAT", ADMIN_IDS[0] if ADMIN_IDS else 0))
 
+# ─── LOCAL TELEGRAM BOT API (TELELOKAL) ──────────────────────────────────────
+# Share telelokal yang sama dengan botcv (port 8082)
+# Set USE_LOCAL_BOT_API=true jika di VPS dan telelokal aktif
+USE_LOCAL_BOT_API  = os.getenv("USE_LOCAL_BOT_API", "false").lower() == "true"
+LOCAL_BOT_API_PORT = int(os.getenv("LOCAL_BOT_API_PORT", 8082))
+
 # ─── CONCURRENCY ──────────────────────────────────────────────────────────────
 DB_POOL_SIZE          = 16
 USER_CLICK_COOLDOWN   = 0.3

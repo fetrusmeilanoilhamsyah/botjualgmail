@@ -33,7 +33,7 @@ def main():
     from dotenv import load_dotenv
     load_dotenv()
 
-    from config import BOT_TOKEN, ADMIN_IDS, WEBHOOK_PORT, HEALTH_PORT
+    from config import BOT_TOKEN, ADMIN_IDS, WEBHOOK_PORT, HEALTH_PORT, USE_LOCAL_BOT_API, LOCAL_BOT_API_PORT
     from database.db import init_db
     from webhook_pakasir import start_webhook_server_thread
 
@@ -48,11 +48,20 @@ def main():
     init_db()
 
     # ── Bangun Aplikasi Bot ────────────────────────────────────────────────────
-    app: Application = (
-        ApplicationBuilder()
-        .token(BOT_TOKEN)
-        .build()
-    )
+    logger.info("📋 Build aplikasi bot...")
+
+    builder = ApplicationBuilder().token(BOT_TOKEN)
+
+    # Gunakan telelokal jika diaktifkan (share dengan botcv, tidak mengganggu)
+    if USE_LOCAL_BOT_API:
+        local_url      = f"http://localhost:{LOCAL_BOT_API_PORT}/bot"
+        local_file_url = f"http://localhost:{LOCAL_BOT_API_PORT}/file/bot"
+        builder = builder.base_url(local_url).base_file_url(local_file_url)
+        logger.info("🔌 Telelokal aktif: %s", local_url)
+    else:
+        logger.info("🌐 Menggunakan Telegram API resmi")
+
+    app: Application = builder.build()
 
     # ── Register Handlers ──────────────────────────────────────────────────────
     logger.info("📋 Meregistrasi handlers...")
