@@ -19,15 +19,17 @@ def fmt_rupiah(n: int) -> str:
 @admin_only
 async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Tampilkan ringkasan stok + opsi kelola."""
-    summary = db.get_stok_summary()
+    with db.get_connection() as conn:
+        total_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+        total_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
+    harga_satuan = db.get_harga_satuan()
 
-    teks = "Kelola Stok Gmail\n\n"
-    for s in summary:
-        aktif_label = "[Aktif]" if s["aktif"] else "[Nonaktif]"
-        teks += (
-            f"{aktif_label} {s['nama']} - {fmt_rupiah(s['harga'])}\n"
-            f"   Tersedia: {s['tersedia']} | Terjual: {s['terjual']}\n"
-        )
+    teks = (
+        "<b>Kelola Stok Gmail (Database Umum)</b>\n\n"
+        f"• Total Tersedia : <b>{total_tersedia:,} Akun</b>\n"
+        f"• Total Terjual  : <b>{total_terjual:,} Akun</b>\n"
+        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
+    )
 
     kb = [
         [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
@@ -36,21 +38,24 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary")],
     ]
     reply_target = update.message or update.callback_query.message
-    await reply_target.reply_text(teks, reply_markup=InlineKeyboardMarkup(kb))
+    await reply_target.reply_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
 @admin_only
 async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer("Di-refresh")
-    summary = db.get_stok_summary()
-    teks = "Kelola Stok Gmail\n\n"
-    for s in summary:
-        aktif_label = "[Aktif]" if s["aktif"] else "[Nonaktif]"
-        teks += (
-            f"{aktif_label} {s['nama']} - {fmt_rupiah(s['harga'])}\n"
-            f"   Tersedia: {s['tersedia']} | Terjual: {s['terjual']}\n"
-        )
+    with db.get_connection() as conn:
+        total_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+        total_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
+    harga_satuan = db.get_harga_satuan()
+
+    teks = (
+        "<b>Kelola Stok Gmail (Database Umum)</b>\n\n"
+        f"• Total Tersedia : <b>{total_tersedia:,} Akun</b>\n"
+        f"• Total Terjual  : <b>{total_terjual:,} Akun</b>\n"
+        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
+    )
     kb = [
         [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
         [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="primary")],
@@ -70,47 +75,29 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def admin_upload_stok_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Minta admin memilih paket untuk upload stok."""
+    """Minta admin mengupload file .txt untuk stok umum."""
     q = update.callback_query
     await q.answer()
 
-    paket_list = db.get_all_paket()
+    db.set_session(update.effective_user.id, "admin_waiting_stok_file", {"paket_id": 1})
+
     teks = (
-        "Upload Stok Gmail\n\n"
+        "<b>Upload Stok Gmail (Database Umum)</b>\n\n"
         "Format file .txt (satu akun per baris):\n"
-        "email|password|recovery|tgl_buat|catatan\n\n"
+        "<code>email|password|recovery|tgl_buat|catatan</code>\n\n"
         "Contoh:\n"
-        "test@gmail.com|Pass123!|recover@gmail.com|2024-01-15|fresh-id\n\n"
+        "<code>test@gmail.com|Pass123!|recover@gmail.com|2024-01-15|fresh-id</code>\n\n"
         "Field minimal: email|password\n\n"
-        "Pilih paket tujuan:"
+        "Silakan kirimkan file .txt Anda sekarang."
     )
-    kb = [[InlineKeyboardButton(f"{p['nama']}", callback_data=f"admin_upload_ke:{p['id']}", style="primary")]
-          for p in paket_list]
-    kb.append([InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")])
-    await q.edit_message_text(teks, reply_markup=InlineKeyboardMarkup(kb))
+    kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
+    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
 @admin_only
 async def admin_upload_pilih_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Admin memilih paket → tunggu file."""
-    q        = update.callback_query
-    paket_id = int(q.data.split(":", 1)[1])
-    await q.answer()
-
-    paket = db.get_paket_by_id(paket_id)
-    if not paket:
-        await q.edit_message_text("Paket tidak ditemukan.")
-        return
-
-    db.set_session(update.effective_user.id, "admin_waiting_stok_file", {"paket_id": paket_id})
-
-    await q.edit_message_text(
-        f"Upload file .txt untuk paket {paket['nama']}\n\n"
-        "Kirimkan file .txt sekarang.",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
-        ]])
-    )
+    """Stub: di-skip karena bypass langsung ke start."""
+    pass
 
 
 @admin_only
@@ -126,10 +113,8 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Kirim file .txt ya.")
         return
 
-    paket_id = session["data"]["paket_id"]
+    paket_id = 1
     db.clear_session(user.id)
-
-    paket = db.get_paket_by_id(paket_id)
 
     msg = await update.message.reply_text("Memproses file...")
 
@@ -141,7 +126,6 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 
     await msg.edit_text(
         f"Stok berhasil ditambahkan!\n\n"
-        f"Paket: {paket['nama']}\n"
         f"Berhasil: {ok} akun\n"
         f"Duplikat (skip): {dup} akun\n"
         f"Total diproses: {len(lines)} baris",
@@ -154,43 +138,27 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 
 @admin_only
 async def admin_input_manual_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Input manual 1 akun — pilih paket dulu."""
+    """Input manual 1 akun untuk database umum."""
     q = update.callback_query
     await q.answer()
 
-    paket_list = db.get_all_paket()
+    db.set_session(update.effective_user.id, "admin_input_manual_akun", {"paket_id": 1})
     teks = (
-        "Input Manual Akun Gmail\n\n"
-        "Pilih paket:"
+        "<b>Input Manual Akun Gmail (Database Umum)</b>\n\n"
+        "Format: <code>email|password|recovery|tgl_buat|catatan</code>\n"
+        "Minimal: email|password\n\n"
+        "Contoh:\n"
+        "<code>test@gmail.com|Pass123!|rec@gmail.com|2024-01-01|fresh</code>\n\n"
+        "Ketik detail akun sekarang:"
     )
-    kb = [[InlineKeyboardButton(p["nama"], callback_data=f"admin_manual_ke:{p['id']}", style="primary")]
-          for p in paket_list]
-    kb.append([InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")])
-    await q.edit_message_text(teks, reply_markup=InlineKeyboardMarkup(kb))
+    kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
+    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
 @admin_only
 async def admin_manual_pilih_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    q        = update.callback_query
-    paket_id = int(q.data.split(":", 1)[1])
-    await q.answer()
-
-    paket = db.get_paket_by_id(paket_id)
-    if not paket:
-        await q.edit_message_text("Paket tidak ditemukan.")
-        return
-
-    db.set_session(update.effective_user.id, "admin_input_manual_akun", {"paket_id": paket_id})
-    await q.edit_message_text(
-        f"Input akun untuk paket {paket['nama']}\n\n"
-        "Format: email|password|recovery|tgl_buat|catatan\n"
-        "Minimal: email|password\n\n"
-        "Contoh:\n"
-        "test@gmail.com|Pass123!|rec@gmail.com|2024-01-01|fresh",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
-        ]])
-    )
+    """Stub: di-skip karena bypass langsung ke start."""
+    pass
 
 
 @admin_only
@@ -200,7 +168,7 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
     if session["state"] != "admin_input_manual_akun":
         return
 
-    paket_id = session["data"]["paket_id"]
+    paket_id = 1
     db.clear_session(user.id)
 
     parts = update.message.text.strip().split("|")
@@ -221,17 +189,15 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
         return
 
     success = db.add_stok_gmail(paket_id, email, password, recovery, tgl_buat, catatan)
-    paket   = db.get_paket_by_id(paket_id)
 
     if success:
-        stok_now = db.get_stok_count(paket_id)
+        stok_now = db.get_stok_count()
         await update.message.reply_text(
             f"Akun berhasil ditambahkan!\n\n"
-            f"Paket: {paket['nama']}\n"
             f"Email: {email}\n"
-            f"Stok tersedia: {stok_now} akun",
+            f"Total stok tersedia: {stok_now} akun",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Tambah Lagi", callback_data=f"admin_manual_ke:{paket_id}", style="primary"),
+                InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="primary"),
                 InlineKeyboardButton("Panel", callback_data="admin_panel", style="danger"),
             ]])
         )
