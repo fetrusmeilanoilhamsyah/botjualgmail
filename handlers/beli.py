@@ -42,12 +42,14 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     paket_list = db.get_paket_aktif()
+    from handlers.start import kirim_atau_edit_menu
     if not paket_list:
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "Katalog Paket Kosong\n\n"
             "Saat ini belum ada paket Gmail yang aktif.\n"
             f"Silakan hubungi admin untuk informasi lebih lanjut: {ADMIN_CONTACT}",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
@@ -74,7 +76,7 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Tombol Custom Quantity
     keyboard.append([InlineKeyboardButton("Beli Jumlah Custom", callback_data="beli_custom", style="success")])
     keyboard.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(keyboard))
 
 
 async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -127,7 +129,8 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="danger")],
         ]
 
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(keyboard))
 
 
 async def show_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -141,7 +144,8 @@ async def show_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Masukkan jumlah akun yang ingin dibeli (angka saja, min 1):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
     db.set_session(update.effective_user.id, "waiting_beli_kuantitas", {"menu_msg_id": q.message.message_id})
 
 
@@ -170,14 +174,10 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
             "Masukkan jumlah akun menggunakan angka saja (contoh: 7):"
         )
         kb = [[InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]]
+        from handlers.start import edit_menu_caption_or_text
         if menu_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                )
-                return
-            except Exception:
-                pass
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
+            return
         await update.message.reply_text(teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -192,14 +192,10 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
             [InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="success")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
+        from handlers.start import edit_menu_caption_or_text
         if menu_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                )
-                return
-            except Exception:
-                pass
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
+            return
         await update.message.reply_text(teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -234,18 +230,10 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
 
+    from handlers.start import edit_menu_caption_or_text
     if menu_msg_id:
-        try:
-            await ctx.bot.edit_message_text(
-                chat_id=user.id,
-                message_id=menu_msg_id,
-                text=teks,
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(kb)
-            )
-            return
-        except Exception:
-            pass
+        await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks, InlineKeyboardMarkup(kb))
+        return
     await ctx.bot.send_message(
         chat_id=user.id,
         text=teks,
@@ -268,10 +256,12 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         await q.answer("Memproses...")
 
+        from handlers.start import kirim_atau_edit_menu
         if session["state"] != "waiting_beli_custom_confirm":
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 "Sesi berakhir. Silakan coba lagi dari katalog.",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Beli Gmail", callback_data="beli_paket", style="success")
                 ]])
             )
@@ -285,13 +275,13 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         saldo = db.get_saldo(user.id)
         if saldo < total_harga:
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 f"<b>Saldo Tidak Mencukupi</b>\n\n"
                 f"Saldo Anda: {fmt_rupiah(saldo)}\n"
                 f"Total Biaya: {fmt_rupiah(total_harga)}\n\n"
                 "Silakan top up terlebih dahulu sebelum melakukan transaksi.",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Top Up", callback_data="topup", style="success"),
                     InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger"),
                 ]])
@@ -299,12 +289,13 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         # Ambil stok global
+        from handlers.start import kirim_atau_edit_menu
         akun_list = db.ambil_stok(1, qty)
         if akun_list is None:
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 "<b>Stok Habis!</b>\n\nMaaf, stok baru saja terjual habis. Silakan coba beberapa saat lagi.",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Pilih Paket", callback_data="beli_paket", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
@@ -322,9 +313,10 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         conn.commit()
                 except Exception:
                     pass
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 "Gagal memotong saldo. Silakan ulangi transaksi Anda.",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
                 ]])
             )
@@ -357,10 +349,12 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
         )
 
+        # Hapus banner photo untuk hasil pembelian agar tidak melebihi batas karakter caption
         try:
-            await q.edit_message_text(teks_kirim, parse_mode="HTML")
+            await q.message.delete()
         except Exception:
-            await q.message.reply_text(teks_kirim, parse_mode="HTML")
+            pass
+        await ctx.bot.send_message(chat_id=user.id, text=teks_kirim, parse_mode="HTML")
 
         # Notif admin
         try:
@@ -412,20 +406,27 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         await q.answer("Memproses...")
 
+        from handlers.start import kirim_atau_edit_menu
         paket = db.get_paket_by_id(paket_id)
         if not paket:
-            await q.edit_message_text("Paket tidak ditemukan.")
+            await kirim_atau_edit_menu(
+                update, ctx,
+                "Paket tidak ditemukan.",
+                InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="success")
+                ]])
+            )
             return
 
         saldo = db.get_saldo(user.id)
         if saldo < paket["harga"]:
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 f"<b>Saldo Tidak Mencukupi</b>\n\n"
                 f"Saldo Anda: {fmt_rupiah(saldo)}\n"
                 f"Harga Paket: {fmt_rupiah(paket['harga'])}\n\n"
                 "Silakan top up terlebih dahulu sebelum melakukan transaksi.",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Top Up", callback_data="topup", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
@@ -435,10 +436,10 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Ambil stok pooled
         akun_list = db.ambil_stok(paket_id, paket["kuantitas"])
         if akun_list is None:
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 "<b>Stok Habis!</b>\n\nMaaf, stok baru saja terjual habis. Silakan coba beberapa saat lagi.",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="success"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
@@ -455,9 +456,10 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         conn.commit()
                 except Exception:
                     pass
-            await q.edit_message_text(
+            await kirim_atau_edit_menu(
+                update, ctx,
                 "Gagal memotong saldo. Silakan ulangi transaksi Anda.",
-                reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardMarkup([[
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
                 ]])
             )
@@ -490,10 +492,12 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
         )
 
+        # Hapus banner photo untuk hasil pembelian agar tidak melebihi batas karakter caption
         try:
-            await q.edit_message_text(teks_kirim, parse_mode="HTML")
+            await q.message.delete()
         except Exception:
-            await q.message.reply_text(teks_kirim, parse_mode="HTML")
+            pass
+        await ctx.bot.send_message(chat_id=user.id, text=teks_kirim, parse_mode="HTML")
 
         # Notif admin
         try:

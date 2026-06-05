@@ -214,6 +214,14 @@ def init_db():
             )
         """)
 
+        # ── settings ──────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
         # ── INDEXES ───────────────────────────────────────────────────────
         conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_paket   ON stok_gmail(paket_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_terjual ON stok_gmail(terjual)")
@@ -904,3 +912,22 @@ def set_session(user_id: int, state: str, data: dict):
 def clear_session(user_id: int):
     with _session_lock:
         _session_cache.pop(user_id, None)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_setting(key: str, default=None) -> str | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO settings (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """, (key, str(value)))
+        conn.commit()

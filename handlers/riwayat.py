@@ -55,12 +55,13 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     riwayat = db.get_riwayat_beli(user.id, limit=100)
 
+    from handlers.start import kirim_atau_edit_menu
     if not riwayat:
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "<b>Riwayat Pembelian - Warung Gmail</b>\n\n"
             "Anda belum pernah melakukan pembelian akun.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="success"),
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
             ]])
@@ -98,7 +99,8 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb.append(nav)
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
 
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -147,7 +149,8 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "Klaim Garansi", callback_data=f"pilih_garansi:{pembelian_id}", style="danger"
             )])
 
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 # ── RIWAYAT MUTASI ───────────────────────────────────────────────────────────
@@ -171,11 +174,12 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     mutasi = db.get_riwayat_mutasi(user.id, limit=100)
 
+    from handlers.start import kirim_atau_edit_menu
     if not mutasi:
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "<b>Riwayat Mutasi - Warung Gmail</b>\n\nBelum ada riwayat transaksi.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
@@ -207,7 +211,8 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb.append(nav)
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
 
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 def register(app):

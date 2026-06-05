@@ -55,9 +55,8 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")],
         ]
 
-    await q.edit_message_text(teks, parse_mode="HTML",
-                               reply_markup=InlineKeyboardMarkup(kb),
-                               disable_web_page_preview=True)
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 def register(app):

@@ -125,7 +125,8 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Batal", callback_data="menu_utama", style="danger")
         ]
     ]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 async def show_topup_manual_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -139,7 +140,8 @@ async def show_topup_manual_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         "Ketik nominal yang ingin kamu top up (angka saja, contoh: <code>15000</code>):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
     db.set_session(update.effective_user.id, "waiting_topup_amount", {"menu_msg_id": q.message.message_id})
 
 
@@ -173,14 +175,10 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Masukkan nominal angka saja (contoh: 50000):"
         )
         kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
+        from handlers.start import edit_menu_caption_or_text
         if menu_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                )
-                return
-            except Exception:
-                pass
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
+            return
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -191,14 +189,10 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Masukkan nominal kembali:"
         )
         kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
+        from handlers.start import edit_menu_caption_or_text
         if menu_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                )
-                return
-            except Exception:
-                pass
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
+            return
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -209,14 +203,10 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Masukkan nominal kembali:"
         )
         kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
+        from handlers.start import edit_menu_caption_or_text
         if menu_msg_id:
-            try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                )
-                return
-            except Exception:
-                pass
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
+            return
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -231,19 +221,13 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
     is_callback = update.callback_query is not None
     msg = None
 
+    from handlers.start import edit_menu_caption_or_text
     if is_callback:
         msg = update.callback_query.message
-        await msg.edit_text("Membuatkan QR Code... Mohon tunggu.")
+        await edit_menu_caption_or_text(ctx, user.id, msg.message_id, "Membuatkan QR Code... Mohon tunggu.", None)
     else:
         if menu_msg_id:
-            try:
-                msg = await ctx.bot.edit_message_text(
-                    chat_id=user.id,
-                    message_id=menu_msg_id,
-                    text="Membuatkan QR Code... Mohon tunggu."
-                )
-            except Exception:
-                pass
+            msg = await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, "Membuatkan QR Code... Mohon tunggu.", None)
         if not msg:
             msg = await ctx.bot.send_message(chat_id=user.id, text="Membuatkan QR Code... Mohon tunggu.")
 
@@ -329,8 +313,8 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
             qr_chat_id=msg.chat.id,
             qr_message_id=msg.message_id,
         )
-        await msg.edit_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb),
-                            disable_web_page_preview=True)
+        from handlers.start import edit_menu_caption_or_text
+        await edit_menu_caption_or_text(ctx, user.id, msg.message_id, teks, InlineKeyboardMarkup(kb))
 
 
 async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

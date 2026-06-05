@@ -2,6 +2,7 @@
 handlers/start.py - Menu utama & /start
 """
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
@@ -11,10 +12,140 @@ from config import ADMIN_IDS, ADMIN_CONTACT, CHANNEL_LIVE_TX
 logger = logging.getLogger(__name__)
 
 MENU_UTAMA = "menu_utama"
+BANNER_PATH = "BANNERBOTGMAIL.png"
 
 
 def fmt_rupiah(n: int) -> str:
     return f"Rp {n:,.0f}".replace(",", ".")
+
+
+async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
+    """
+    Helper untuk mengirim atau mengedit menu dengan menyertakan banner.
+    Jika banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel).
+    Jika banner tidak ada, fallback ke teks biasa.
+    """
+    user = update.effective_user
+    q = update.callback_query
+    
+    banner_file_id = None
+    if os.path.exists(BANNER_PATH):
+        try:
+            current_mtime = str(int(os.path.getmtime(BANNER_PATH)))
+        except Exception:
+            current_mtime = ""
+            
+        cached_file_id = db.get_setting("banner_file_id")
+        cached_mtime = db.get_setting("banner_mtime")
+        
+        if cached_file_id and cached_mtime == current_mtime:
+            banner_file_id = cached_file_id
+        else:
+            # Upload pertama kali langsung sebagai menu
+            try:
+                logger.info("Uploading banner as menu...")
+                with open(BANNER_PATH, "rb") as f:
+                    if q:
+                        try:
+                            await q.message.delete()
+                        except Exception:
+                            pass
+                        sent = await ctx.bot.send_photo(
+                            chat_id=user.id,
+                            photo=f,
+                            caption=teks,
+                            parse_mode="HTML",
+                            reply_markup=markup
+                        )
+                    else:
+                        sent = await update.message.reply_photo(
+                            photo=f,
+                            caption=teks,
+                            parse_mode="HTML",
+                            reply_markup=markup
+                        )
+                banner_file_id = sent.photo[-1].file_id
+                db.set_setting("banner_file_id", banner_file_id)
+                db.set_setting("banner_mtime", current_mtime)
+                return
+            except Exception as e:
+                logger.error("Failed to upload banner: %s", e)
+                banner_file_id = None
+
+    if banner_file_id and len(teks) <= 1000:
+        if q:
+            await q.answer()
+            if q.message.photo:
+                # Edit caption secara inline (sangat cepat, banner tetap nempel!)
+                try:
+                    await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    # Fallback jika gagal edit
+                    try:
+                        await q.message.delete()
+                    except Exception:
+                        pass
+                    await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
+            else:
+                # Pesan lama adalah teks, hapus dan kirim foto banner baru
+                try:
+                    await q.message.delete()
+                except Exception:
+                    pass
+                await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
+        else:
+            # Command /start atau input non-callback
+            await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
+    else:
+        # Fallback teks biasa jika banner tidak ada
+        if q:
+            await q.answer()
+            if q.message.photo:
+                try:
+                    await q.message.delete()
+                except Exception:
+                    pass
+                await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+            else:
+                try:
+                    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+        else:
+            await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
+
+
+async def edit_menu_caption_or_text(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, teks: str, markup: InlineKeyboardMarkup):
+    """
+    Helper untuk mengedit pesan menu yang mungkin berupa foto (banner) atau teks biasa.
+    """
+    try:
+        return await ctx.bot.edit_message_caption(
+            chat_id=chat_id,
+            message_id=message_id,
+            caption=teks,
+            parse_mode="HTML",
+            reply_markup=markup
+        )
+    except Exception:
+        try:
+            return await ctx.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=teks,
+                parse_mode="HTML",
+                reply_markup=markup
+            )
+        except Exception:
+            try:
+                return await ctx.bot.send_message(
+                    chat_id=chat_id,
+                    text=teks,
+                    parse_mode="HTML",
+                    reply_markup=markup
+                )
+            except Exception:
+                return None
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -34,11 +165,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             logger.warning("[start] referral error: %s", e)
 
     db.upsert_user(user.id, user.username or "", user.full_name or "")
-    await _show_menu(update, ctx)
-
-
-async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user      = update.effective_user
+    
     user_data = db.get_user(user.id)
     saldo     = user_data["saldo"] if user_data else 0
     stats     = db.get_store_stats()
@@ -100,46 +227,16 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ])
 
     markup = InlineKeyboardMarkup(keyboard)
-
-    if update.callback_query:
-        await update.callback_query.answer()
-        # Jika pesan lama berupa media/foto, hapus pesan lama dan kirim pesan teks baru
-        if update.callback_query.message.photo:
-            try:
-                await update.callback_query.message.delete()
-            except Exception:
-                pass
-            await ctx.bot.send_message(
-                chat_id=user.id,
-                text=teks,
-                parse_mode="HTML",
-                reply_markup=markup
-            )
-        else:
-            try:
-                await update.callback_query.edit_message_text(
-                    teks, parse_mode="HTML", reply_markup=markup
-                )
-            except Exception:
-                await ctx.bot.send_message(
-                    chat_id=user.id,
-                    text=teks,
-                    parse_mode="HTML",
-                    reply_markup=markup
-                )
-    else:
-        await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
-
+    await kirim_atau_edit_menu(update, ctx, teks, markup)
 
 
 async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
     user = update.effective_user
-    await q.answer()
 
     u = db.get_user(user.id)
     if not u:
-        await q.edit_message_text("Akun tidak ditemukan.")
+        await q.answer("Akun tidak ditemukan.")
         return
 
     ref_stats = db.get_referral_stats(user.id)
@@ -155,7 +252,7 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
     kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user):
