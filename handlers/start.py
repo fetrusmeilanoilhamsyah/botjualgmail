@@ -184,5 +184,6 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
 
 
 def register(app):
+    app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CallbackQueryHandler(cmd_start,   pattern="^menu_utama$"))
     app.add_handler(CallbackQueryHandler(info_akun,   pattern="^info_akun$"))
