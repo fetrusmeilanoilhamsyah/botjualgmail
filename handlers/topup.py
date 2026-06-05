@@ -76,28 +76,28 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     kb = [
         [
-            InlineKeyboardButton("Rp 1.000 (1k)", callback_data="topup_nominal:1000", style="primary"),
-            InlineKeyboardButton("Rp 5.000 (5k)", callback_data="topup_nominal:5000", style="primary"),
+            InlineKeyboardButton("1K", callback_data="topup_nominal:1000", style="primary"),
+            InlineKeyboardButton("5K", callback_data="topup_nominal:5000", style="primary"),
         ],
         [
-            InlineKeyboardButton("Rp 10.000 (10k)", callback_data="topup_nominal:10000", style="primary"),
-            InlineKeyboardButton("Rp 15.000 (15k)", callback_data="topup_nominal:15000", style="primary"),
+            InlineKeyboardButton("10K", callback_data="topup_nominal:10000", style="primary"),
+            InlineKeyboardButton("15K", callback_data="topup_nominal:15000", style="primary"),
         ],
         [
-            InlineKeyboardButton("Rp 20.000 (20k)", callback_data="topup_nominal:20000", style="primary"),
-            InlineKeyboardButton("Rp 25.000 (25k)", callback_data="topup_nominal:25000", style="primary"),
+            InlineKeyboardButton("20K", callback_data="topup_nominal:20000", style="primary"),
+            InlineKeyboardButton("25K", callback_data="topup_nominal:25000", style="primary"),
         ],
         [
-            InlineKeyboardButton("Rp 30.000 (30k)", callback_data="topup_nominal:30000", style="primary"),
-            InlineKeyboardButton("Rp 50.000 (50k)", callback_data="topup_nominal:50000", style="primary"),
+            InlineKeyboardButton("30K", callback_data="topup_nominal:30000", style="primary"),
+            InlineKeyboardButton("50K", callback_data="topup_nominal:50000", style="primary"),
         ],
         [
-            InlineKeyboardButton("Rp 100.000 (100k)", callback_data="topup_nominal:100000", style="primary"),
-            InlineKeyboardButton("Rp 200.000 (200k)", callback_data="topup_nominal:200000", style="primary"),
+            InlineKeyboardButton("100K", callback_data="topup_nominal:100000", style="primary"),
+            InlineKeyboardButton("200K", callback_data="topup_nominal:200000", style="primary"),
         ],
         [
-            InlineKeyboardButton("Rp 500.000 (500k)", callback_data="topup_nominal:500000", style="primary"),
-            InlineKeyboardButton("Rp 1.000.000 (1 Jt)", callback_data="topup_nominal:1000000", style="primary"),
+            InlineKeyboardButton("500K", callback_data="topup_nominal:500000", style="primary"),
+            InlineKeyboardButton("1 Juta", callback_data="topup_nominal:1000000", style="primary"),
         ],
         [
             InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary"),

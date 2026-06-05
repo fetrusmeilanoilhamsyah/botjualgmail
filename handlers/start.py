@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
 from database import db
-from config import ADMIN_IDS, ADMIN_CONTACT
+from config import ADMIN_IDS, ADMIN_CONTACT, CHANNEL_LIVE_TX
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
     admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
+    channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
 
     keyboard = [
         [
@@ -83,11 +84,15 @@ async def _show_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             contact_row.append(InlineKeyboardButton(f"Chat Admin {idx}", url=f"https://t.me/{contact.lstrip('@')}", style="danger"))
 
     if len(contact_row) == 1:
-        contact_row.append(InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger"))
-        keyboard.append(contact_row)
-    else:
+        contact_row.append(InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"))
         keyboard.append(contact_row)
         keyboard.append([InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger")])
+    else:
+        keyboard.append(contact_row)
+        keyboard.append([
+            InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"),
+            InlineKeyboardButton("Info Akun", callback_data="info_akun", style="danger")
+        ])
 
     if is_admin:
         keyboard.append([
