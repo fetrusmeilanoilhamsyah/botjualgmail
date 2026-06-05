@@ -10,7 +10,7 @@ Flow:
 import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
 from config import ADMIN_CONTACT, ADMIN_NOTIF_CHAT
@@ -39,24 +39,24 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if not valid:
         await q.edit_message_text(
-            "😔 <b>Tidak Ada Garansi Aktif</b>\n\n"
+            "<b>Tidak Ada Garansi Aktif</b>\n\n"
             "Tidak ada pembelian yang masih dalam masa garansi (24 jam).\n\n"
             f"Jika ada masalah, hubungi admin: {ADMIN_CONTACT}",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
 
-    teks = "🛡️ <b>Klaim Garansi</b>\n\nPilih pembelian yang ingin diklaim:\n"
+    teks = "<b>Klaim Garansi</b>\n\nPilih pembelian yang ingin diklaim:\n"
     kb   = []
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
         label    = f"#{r['id']} – {r['paket_nama']} (sisa ~{sisa_jam}j)"
         kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="primary")])
 
-    kb.append([InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")])
+    kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -69,14 +69,14 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     detail = db.get_detail_pembelian(pembelian_id, user.id)
     if not detail:
-        await q.edit_message_text("❌ Pembelian tidak ditemukan.")
+        await q.edit_message_text("Pembelian tidak ditemukan.")
         return
 
     if detail["status"] != "aktif":
         await q.edit_message_text(
-            "❌ Pembelian ini sudah diklaim garansinya atau sudah selesai.",
+            "Pembelian ini sudah diklaim garansinya atau sudah selesai.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Kembali", callback_data="garansi", style="primary")
+                InlineKeyboardButton("Kembali", callback_data="garansi", style="primary")
             ]])
         )
         return
@@ -84,9 +84,9 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     now_iso = datetime.now().isoformat()
     if detail["garansi_until"] <= now_iso:
         await q.edit_message_text(
-            "⏰ Masa garansi pembelian ini sudah habis.",
+            "Masa garansi pembelian ini sudah habis.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
@@ -94,14 +94,14 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db.set_session(user.id, "waiting_garansi_alasan", {"pembelian_id": pembelian_id})
 
     teks = (
-        f"🛡️ <b>Klaim Garansi</b>\n\n"
-        f"📦 Paket: <b>{detail['paket_nama']}</b>\n"
-        f"📌 ID Pesanan: #{pembelian_id}\n\n"
+        f"<b>Klaim Garansi</b>\n\n"
+        f"Paket: <b>{detail['paket_nama']}</b>\n"
+        f"ID Pesanan: #{pembelian_id}\n\n"
         "Jelaskan masalah yang kamu alami:\n"
         "(contoh: akun tidak bisa login, password salah, dll)\n\n"
         "Ketik alasanmu:"
     )
-    kb = [[InlineKeyboardButton("❌ Batal", callback_data="garansi", style="danger")]]
+    kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -118,7 +118,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if len(alasan) < 5:
         await update.message.reply_text(
-            "❌ Alasan terlalu singkat. Tolong jelaskan masalah yang kamu alami."
+            "Alasan terlalu singkat. Tolong jelaskan masalah yang kamu alami."
         )
         return
 
@@ -126,7 +126,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if garansi_id is None:
         await update.message.reply_text(
-            "❌ Gagal membuat klaim garansi.\n"
+            "Gagal membuat klaim garansi.\n"
             "Kemungkinan:\n"
             "• Garansi sudah kadaluarsa\n"
             "• Sudah ada klaim aktif untuk pesanan ini\n"
@@ -136,15 +136,15 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        f"✅ <b>Klaim Garansi Terkirim!</b>\n\n"
-        f"📌 ID Klaim: #{garansi_id}\n"
-        f"📦 ID Pesanan: #{pembelian_id}\n"
-        f"💬 Alasan: {alasan}\n\n"
+        f"<b>Klaim Garansi Terkirim!</b>\n\n"
+        f"ID Klaim: #{garansi_id}\n"
+        f"ID Pesanan: #{pembelian_id}\n"
+        f"Alasan: {alasan}\n\n"
         "Admin akan memproses klaim kamu segera.\n"
         f"Jika mendesak, hubungi: {ADMIN_CONTACT}",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
+            InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
         ]])
     )
 
@@ -152,11 +152,11 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         user_info = db.get_user(user.id)
         notif = (
-            f"🛡️ <b>KLAIM GARANSI BARU</b>\n\n"
-            f"👤 User: {user.full_name} (@{user.username or '-'}) [<code>{user.id}</code>]\n"
-            f"📌 ID Klaim: #{garansi_id}\n"
-            f"📦 ID Pesanan: #{pembelian_id}\n"
-            f"💬 Alasan: {alasan}\n\n"
+            f"<b>KLAIM GARANSI BARU</b>\n\n"
+            f"User: {user.full_name} (@{user.username or '-'}) [<code>{user.id}</code>]\n"
+            f"ID Klaim: #{garansi_id}\n"
+            f"ID Pesanan: #{pembelian_id}\n"
+            f"Alasan: {alasan}\n\n"
             f"Gunakan /garansi_list untuk melihat semua klaim."
         )
         await ctx.bot.send_message(chat_id=ADMIN_NOTIF_CHAT, text=notif, parse_mode="HTML")
@@ -167,6 +167,3 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def register(app):
     app.add_handler(CallbackQueryHandler(show_garansi_menu, pattern="^garansi$"))
     app.add_handler(CallbackQueryHandler(pilih_garansi,     pattern="^pilih_garansi:"))
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, handle_garansi_alasan
-    ))

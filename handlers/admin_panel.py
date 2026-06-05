@@ -28,27 +28,27 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s = db.get_admin_stats()
 
     teks = (
-        f"⚙️ <b>Panel Admin — Bot Jual Gmail</b>\n\n"
-        f"👥 Total User: {s['total_user']:,}\n"
-        f"🛒 Transaksi Hari Ini: {s['trx_hari_ini']}\n"
-        f"🛡️ Klaim Garansi Pending: {s['garansi_pending']}\n\n"
+        f"<b>Panel Admin - Bot Jual Gmail</b>\n\n"
+        f"Total User: {s['total_user']:,}\n"
+        f"Transaksi Hari Ini: {s['trx_hari_ini']}\n"
+        f"Klaim Garansi Pending: {s['garansi_pending']}\n\n"
         "Pilih menu:"
     )
 
     kb = [
         [
-            InlineKeyboardButton("📊 Statistik",          callback_data="admin_stat"),
-            InlineKeyboardButton("📦 Kelola Stok",         callback_data="admin_stok_refresh"),
+            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="primary"),
+            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="primary"),
         ],
         [
-            InlineKeyboardButton("⚙️ Paket & Harga",       callback_data="admin_paket"),
-            InlineKeyboardButton("🛡️ Klaim Garansi",       callback_data="admin_garansi_list"),
+            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="primary"),
+            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="primary"),
         ],
         [
-            InlineKeyboardButton("📢 Broadcast",           callback_data="admin_broadcast_start_cb"),
-            InlineKeyboardButton("💰 Isi Saldo User",      callback_data="admin_isi_saldo"),
+            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="primary"),
+            InlineKeyboardButton("Isi Saldo User",      callback_data="admin_isi_saldo", style="primary"),
         ],
-        [InlineKeyboardButton("🏠 Menu Utama Bot",         callback_data="menu_utama")],
+        [InlineKeyboardButton("Menu Utama Bot",         callback_data="menu_utama", style="danger")],
     ]
 
     markup = InlineKeyboardMarkup(kb)

@@ -123,10 +123,10 @@ def main():
         await q.answer()
         db.set_session(update.effective_user.id, "admin_broadcast_preview", {})
         await q.edit_message_text(
-            "📢 <b>Broadcast Pesan</b>\n\nKetik pesan yang ingin dikirim ke semua user.\nMendukung HTML format.",
+            "Broadcast Pesan\n\nKetik pesan yang ingin dikirim ke semua user.\nMendukung HTML format.",
             parse_mode="HTML",
             reply_markup=__import__("telegram").InlineKeyboardMarkup([[
-                __import__("telegram").InlineKeyboardButton("❌ Batal", callback_data="admin_panel")
+                __import__("telegram").InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
             ]])
         )
 
@@ -140,12 +140,12 @@ def main():
         await q.answer()
         db.set_session(update.effective_user.id, "admin_isi_saldo", {})
         await q.edit_message_text(
-            "💰 <b>Isi Saldo User</b>\n\n"
+            "Isi Saldo User\n\n"
             "Format: <code>USER_ID JUMLAH KETERANGAN</code>\n\n"
             "Contoh: <code>1234567 50000 Bonus admin</code>",
             parse_mode="HTML",
             reply_markup=__import__("telegram").InlineKeyboardMarkup([[
-                __import__("telegram").InlineKeyboardButton("❌ Batal", callback_data="admin_panel")
+                __import__("telegram").InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
             ]])
         )
 
@@ -166,24 +166,75 @@ def main():
             jml   = int(parts[1])
             ket   = parts[2] if len(parts) > 2 else "Manual admin"
         except (ValueError, IndexError):
-            await update.message.reply_text("❌ Format salah. Contoh: <code>1234567 50000 Bonus</code>", parse_mode="HTML")
+            await update.message.reply_text("Format salah. Contoh: <code>1234567 50000 Bonus</code>", parse_mode="HTML")
             return
         result = db.tambah_saldo(uid, jml, "manual", ket, ref_id=f"admin_{user.id}")
         await update.message.reply_text(
-            f"✅ Saldo berhasil ditambahkan!\n\n"
-            f"👤 User ID: {uid}\n"
-            f"💰 Ditambah: Rp {jml:,}\n"
-            f"💳 Saldo baru: Rp {result['saldo_sesudah']:,}"
+            f"Saldo berhasil ditambahkan!\n\n"
+            f"User ID: {uid}\n"
+            f"Ditambah: Rp {jml:,}\n"
+            f"Saldo baru: Rp {result['saldo_sesudah']:,}"
         )
         try:
             await ctx.bot.send_message(
                 chat_id=uid,
-                text=f"✅ Saldo kamu bertambah Rp {jml:,}\nKeterangan: {ket}\nSaldo: Rp {result['saldo_sesudah']:,}"
+                text=f"Saldo kamu bertambah Rp {jml:,}\nKeterangan: {ket}\nSaldo: Rp {result['saldo_sesudah']:,}"
             )
         except Exception:
             pass
 
-    app.add_handler(MessageHandler(tg_filters.TEXT & ~tg_filters.COMMAND, admin_proses_isi_saldo))
+    # ── Centralized Routers ──────────────────────────────────────────────────
+    async def central_text_router(update, ctx):
+        user = update.effective_user
+        if not user:
+            return
+        session = db.get_session(user.id)
+        state = session.get("state")
+        if not state:
+            return
+
+        from handlers import (
+            topup,
+            beli,
+            garansi,
+            admin_broadcast,
+            admin_stok,
+            admin_garansi,
+        )
+
+        if state == "waiting_topup_amount":
+            await topup.handle_topup_input(update, ctx)
+        elif state == "waiting_beli_kuantitas":
+            await beli.handle_beli_kuantitas_input(update, ctx)
+        elif state == "waiting_garansi_alasan":
+            await garansi.handle_garansi_alasan(update, ctx)
+        elif state == "admin_broadcast_preview":
+            await admin_broadcast.admin_broadcast_preview(update, ctx)
+        elif state == "admin_isi_saldo":
+            await admin_proses_isi_saldo(update, ctx)
+        elif state == "admin_input_manual_akun":
+            await admin_stok.admin_terima_manual_akun(update, ctx)
+        elif state == "admin_edit_harga_satuan":
+            await admin_stok.admin_terima_harga_satuan_baru(update, ctx)
+        elif state == "admin_tolak_garansi_alasan":
+            await admin_garansi.admin_terima_alasan_tolak(update, ctx)
+
+    async def central_document_router(update, ctx):
+        user = update.effective_user
+        if not user:
+            return
+        session = db.get_session(user.id)
+        state = session.get("state")
+        if not state:
+            return
+
+        from handlers import admin_stok
+
+        if state == "admin_waiting_stok_file":
+            await admin_stok.admin_terima_stok_file(update, ctx)
+
+    app.add_handler(MessageHandler(tg_filters.TEXT & ~tg_filters.COMMAND, central_text_router))
+    app.add_handler(MessageHandler(tg_filters.Document.ALL, central_document_router))
 
     # ── Bot Commands ───────────────────────────────────────────────────────────
     async def post_init(application: Application):

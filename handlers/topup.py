@@ -6,7 +6,7 @@ import uuid
 import requests
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
 from config import (
@@ -24,10 +24,6 @@ def fmt_rupiah(n: int) -> str:
 
 
 def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None:
-    """
-    Buat order QRIS ke Pakasir.
-    Return: {"payment_url": ..., "qr_code": ..., "expired_at": ...} atau None.
-    """
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
     url = f"{PAKASIR_BASE}/order"
@@ -39,7 +35,7 @@ def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None
     payload = {
         "order_id":    order_id,
         "amount":      amount,
-        "description": f"Top Up Saldo – User {user_id}",
+        "description": f"Top Up Saldo - User {user_id}",
         "project":     PAKASIR_SLUG,
         "sandbox":     PAKASIR_SANDBOX,
     }
@@ -55,26 +51,59 @@ def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None
         return None
 
 
-# ── Handler: Tombol Top Up ──────────────────────────────────────────────────
-
 async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
     teks = (
-        "💳 <b>Top Up Saldo</b>\n\n"
+        "<b>Top Up Saldo</b>\n\n"
         f"Minimum top up: <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
         f"Maksimum top up: <b>{fmt_rupiah(TOPUP_MAX)}</b>\n\n"
-        "Ketik nominal yang ingin kamu top up (contoh: <code>50000</code>):"
+        "Silakan pilih nominal top up:"
     )
-    kb = [[InlineKeyboardButton("❌ Batal", callback_data="menu_utama", style="danger")]]
+    kb = [
+        [
+            InlineKeyboardButton("Rp 1.000 (1k)", callback_data="topup_nominal:1000", style="primary"),
+            InlineKeyboardButton("Rp 5.000 (5k)", callback_data="topup_nominal:5000", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("Rp 10.000 (10k)", callback_data="topup_nominal:10000", style="primary"),
+            InlineKeyboardButton("Rp 20.000 (20k)", callback_data="topup_nominal:20000", style="primary"),
+            InlineKeyboardButton("Rp 50.000 (50k)", callback_data="topup_nominal:50000", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary")
+        ],
+        [
+            InlineKeyboardButton("Batal", callback_data="menu_utama", style="danger")
+        ]
+    ]
     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
 
+
+async def show_topup_manual_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    teks = (
+        "<b>Top Up Nominal Manual</b>\n\n"
+        f"Minimum: <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
+        f"Maksimum: <b>{fmt_rupiah(TOPUP_MAX)}</b>\n\n"
+        "Ketik nominal yang ingin kamu top up (angka saja, contoh: <code>15000</code>):"
+    )
+    kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
+    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
     db.set_session(update.effective_user.id, "waiting_topup_amount", {})
 
 
+async def handle_topup_nominal_click(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    amount = int(q.data.split(":", 1)[1])
+    await q.answer(f"Memproses top up {fmt_rupiah(amount)}...")
+    await proses_topup_order(update, ctx, amount)
+
+
 async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Terima input nominal top up dari user."""
     user    = update.effective_user
     session = db.get_session(user.id)
     if session["state"] != "waiting_topup_amount":
@@ -85,33 +114,42 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         amount = int(text)
     except ValueError:
         await update.message.reply_text(
-            "❌ Format salah. Ketik angka saja, contoh: <code>50000</code>",
+            "Format salah. Ketik angka saja, contoh: <code>50000</code>",
             parse_mode="HTML"
         )
         return
 
     if amount < TOPUP_MIN:
         await update.message.reply_text(
-            f"❌ Minimum top up adalah <b>{fmt_rupiah(TOPUP_MIN)}</b>.",
+            f"Minimum top up adalah <b>{fmt_rupiah(TOPUP_MIN)}</b>.",
             parse_mode="HTML"
         )
         return
 
     if amount > TOPUP_MAX:
         await update.message.reply_text(
-            f"❌ Maksimum top up adalah <b>{fmt_rupiah(TOPUP_MAX)}</b>.",
+            f"Maksimum top up adalah <b>{fmt_rupiah(TOPUP_MAX)}</b>.",
             parse_mode="HTML"
         )
         return
 
     db.clear_session(user.id)
+    await proses_topup_order(update, ctx, amount)
 
-    # Buat order ID unik
+
+async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amount: int):
+    user = update.effective_user
     order_id = f"TU-{user.id}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 
-    msg = await update.message.reply_text(
-        "⏳ Membuatkan QR Code... Mohon tunggu."
-    )
+    is_callback = update.callback_query is not None
+
+    if is_callback:
+        # Edit message dari button click
+        msg = update.callback_query.message
+        await msg.edit_text("Membuatkan QR Code... Mohon tunggu.")
+    else:
+        # Kirim message baru dari text input
+        msg = await update.message.reply_text("Membuatkan QR Code... Mohon tunggu.")
 
     # Buat order Pakasir
     if PAKASIR_ENABLED:
@@ -120,9 +158,7 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         order_data = None
 
     if PAKASIR_ENABLED and order_data is None:
-        await msg.edit_text(
-            "❌ Gagal membuat QR Code. Coba lagi atau hubungi admin."
-        )
+        await msg.edit_text("Gagal membuat QR Code. Coba lagi atau hubungi admin.")
         return
 
     # Simpan ke DB
@@ -139,35 +175,34 @@ async def handle_topup_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         expired_at   = order_data.get("expired_at", "~15 menit")
 
         teks = (
-            f"💳 <b>Top Up Saldo</b>\n\n"
-            f"💰 Nominal: <b>{fmt_rupiah(amount)}</b>\n"
-            f"📋 Order ID: <code>{order_id}</code>\n"
-            f"⏰ Berlaku s/d: {expired_at}\n\n"
-            f"🔗 <a href='{payment_url}'>Klik untuk bayar via QRIS</a>\n\n"
-            "Setelah pembayaran dikonfirmasi, saldo otomatis bertambah ✅"
+            f"<b>Top Up Saldo</b>\n\n"
+            f"Nominal: <b>{fmt_rupiah(amount)}</b>\n"
+            f"Order ID: <code>{order_id}</code>\n"
+            f"Berlaku s/d: {expired_at}\n\n"
+            f"Klik untuk bayar via QRIS: <a href='{payment_url}'>Bayar</a>\n\n"
+            "Setelah pembayaran dikonfirmasi, saldo otomatis bertambah."
         )
         kb = [
-            [InlineKeyboardButton("💸 Bayar Sekarang", url=payment_url, style="success")],
-            [InlineKeyboardButton("🔄 Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="success")],
-            [InlineKeyboardButton("❌ Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")],
+            [InlineKeyboardButton("Bayar Sekarang", url=payment_url, style="primary")],
+            [InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary")],
+            [InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")],
         ]
     else:
         # Mode manual
         teks = (
-            f"💳 <b>Top Up Saldo (Manual)</b>\n\n"
-            f"💰 Nominal: <b>{fmt_rupiah(amount)}</b>\n"
-            f"📋 Order ID: <code>{order_id}</code>\n\n"
+            f"<b>Top Up Saldo (Manual)</b>\n\n"
+            f"Nominal: <b>{fmt_rupiah(amount)}</b>\n"
+            f"Order ID: <code>{order_id}</code>\n\n"
             "Hubungi admin untuk melakukan top up manual.\n"
             f"Admin: @{ctx.bot_data.get('admin_contact', 'admin')}"
         )
-        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")]]
+        kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
 
     await msg.edit_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb),
                         disable_web_page_preview=True)
 
 
 async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Cek status topup secara manual (user klik tombol)."""
     q = update.callback_query
     await q.answer("Memeriksa status...")
 
@@ -175,31 +210,31 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     topup    = db.get_topup(order_id)
 
     if not topup:
-        await q.edit_message_text("❌ Data topup tidak ditemukan.")
+        await q.edit_message_text("Data topup tidak ditemukan.")
         return
 
     if topup["status"] == "completed":
         saldo = db.get_saldo(topup["user_id"])
         await q.edit_message_text(
-            f"✅ <b>Top Up Berhasil!</b>\n\n"
-            f"💰 Nominal: {fmt_rupiah(topup['jumlah'])}\n"
-            f"💳 Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>",
+            f"Top Up Berhasil!\n\n"
+            f"Nominal: {fmt_rupiah(topup['jumlah'])}\n"
+            f"Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
             ]])
         )
     elif topup["status"] == "expired":
         await q.edit_message_text(
-            "⏰ <b>Pembayaran Kadaluarsa</b>\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
+            "Pembayaran Kadaluarsa\n\nQR Code sudah tidak berlaku. Silakan buat top up baru.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("💳 Top Up Lagi", callback_data="topup", style="success"),
-                InlineKeyboardButton("🏠 Menu", callback_data="menu_utama", style="danger"),
+                InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
+                InlineKeyboardButton("Menu", callback_data="menu_utama", style="danger"),
             ]])
         )
     else:
-        await q.answer("⏳ Pembayaran belum masuk. Silakan selesaikan pembayaran terlebih dahulu.", show_alert=True)
+        await q.answer("Pembayaran belum masuk. Silakan selesaikan pembayaran terlebih dahulu.", show_alert=True)
 
 
 async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -208,17 +243,16 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     order_id = q.data.split(":", 1)[1]
     db.update_topup_status(order_id, "cancelled")
     await q.edit_message_text(
-        "❌ Top up dibatalkan.",
+        "Top up dibatalkan.",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="success")
+            InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="primary")
         ]])
     )
 
 
 def register(app):
-    app.add_handler(CallbackQueryHandler(show_topup_menu, pattern="^topup$"))
-    app.add_handler(CallbackQueryHandler(cek_topup,       pattern="^cek_topup:"))
-    app.add_handler(CallbackQueryHandler(batal_topup,     pattern="^batal_topup:"))
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, handle_topup_input
-    ))
+    app.add_handler(CallbackQueryHandler(show_topup_menu,          pattern="^topup$"))
+    app.add_handler(CallbackQueryHandler(show_topup_manual_input,  pattern="^topup_manual$"))
+    app.add_handler(CallbackQueryHandler(handle_topup_nominal_click, pattern="^topup_nominal:"))
+    app.add_handler(CallbackQueryHandler(cek_topup,                pattern="^cek_topup:"))
+    app.add_handler(CallbackQueryHandler(batal_topup,              pattern="^batal_topup:"))

@@ -32,27 +32,27 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if is_ban:
         teks = (
-            "⛔ <b>Fitur Referral Dinonaktifkan</b>\n\n"
+            "<b>Fitur Referral Dinonaktifkan</b>\n\n"
             "Akun referral kamu telah dinonaktifkan karena terdeteksi "
             "aktivitas mencurigakan (bot/spam).\n\n"
             "Jika ini kesalahan, hubungi admin."
         )
-        kb = [[InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")]]
+        kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
     else:
         teks = (
-            "👥 <b>Program Referral</b>\n\n"
+            "<b>Program Referral</b>\n\n"
             f"Dapatkan <b>{fmt_rupiah(REFERRAL_BONUS)}</b> untuk setiap teman "
             "yang mendaftar via link kamu!\n\n"
-            f"🔗 <b>Link Referral Kamu:</b>\n"
+            f"<b>Link Referral Kamu:</b>\n"
             f"<code>{link}</code>\n\n"
-            f"📊 <b>Statistik:</b>\n"
-            f"   👤 Total referral: {count} orang\n"
-            f"   💰 Saldo kamu saat ini: {fmt_rupiah(saldo)}\n\n"
-            "⚠️ <i>Anti-bot aktif: jika terdeteksi spam, fitur akan dinonaktifkan otomatis.</i>"
+            f"<b>Statistik:</b>\n"
+            f"   Total referral: {count} orang\n"
+            f"   Saldo kamu saat ini: {fmt_rupiah(saldo)}\n\n"
+            "<i>Anti-bot aktif: jika terdeteksi spam, fitur akan dinonaktifkan otomatis.</i>"
         )
         kb = [
-            [InlineKeyboardButton("🔗 Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="success")],
-            [InlineKeyboardButton("🏠 Menu Utama", callback_data="menu_utama", style="danger")],
+            [InlineKeyboardButton("Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="primary")],
+            [InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")],
         ]
 
     await q.edit_message_text(teks, parse_mode="HTML",

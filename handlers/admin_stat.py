@@ -47,39 +47,39 @@ async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ) or "   (tidak ada data)"
 
     teks = (
-        f"📊 <b>Dashboard Admin</b>\n"
-        f"🕐 Update: {now}\n\n"
+        f"<b>Dashboard Admin</b>\n"
+        f"Update: {now}\n\n"
 
-        f"👥 <b>User</b>\n"
+        f"<b>User</b>\n"
         f"   Total: {s['total_user']:,} user\n\n"
 
-        f"💰 <b>Keuangan</b>\n"
+        f"<b>Keuangan</b>\n"
         f"   Saldo beredar: {fmt_rupiah(s['total_saldo'])}\n"
         f"   Topup hari ini: {fmt_rupiah(s['topup_hari_ini'])}\n"
         f"   Omset hari ini: {fmt_rupiah(s['omset_hari_ini'])}\n"
         f"   Omset total: {fmt_rupiah(s['omset_total'])}\n\n"
 
-        f"🛒 <b>Transaksi</b>\n"
+        f"<b>Transaksi</b>\n"
         f"   Pembelian hari ini: {s['trx_hari_ini']}\n"
         f"   Total pembelian: {s['total_trx']}\n\n"
 
-        f"🛡️ <b>Garansi</b>\n"
+        f"<b>Garansi</b>\n"
         f"   Klaim pending: {s['garansi_pending']}\n\n"
 
-        f"📦 <b>Stok Tersedia</b>\n"
+        f"<b>Stok Tersedia</b>\n"
         f"{stok_lines}"
     )
 
     kb = [
         [
-            InlineKeyboardButton("🔄 Refresh",        callback_data="admin_stat"),
-            InlineKeyboardButton("🛡️ Klaim Garansi",  callback_data="admin_garansi_list"),
+            InlineKeyboardButton("Refresh",        callback_data="admin_stat", style="primary"),
+            InlineKeyboardButton("Klaim Garansi",  callback_data="admin_garansi_list", style="primary"),
         ],
         [
-            InlineKeyboardButton("📦 Kelola Stok",    callback_data="admin_stok_refresh"),
-            InlineKeyboardButton("📢 Broadcast",       callback_data="admin_broadcast_start"),
+            InlineKeyboardButton("Kelola Stok",    callback_data="admin_stok_refresh", style="primary"),
+            InlineKeyboardButton("Broadcast",       callback_data="admin_broadcast_start_cb", style="primary"),
         ],
-        [InlineKeyboardButton("🏠 Panel Admin",       callback_data="admin_panel")],
+        [InlineKeyboardButton("Panel Admin",       callback_data="admin_panel", style="danger")],
     ]
 
     reply_target = update.message if update.message else update.callback_query.message
