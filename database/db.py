@@ -326,7 +326,7 @@ def kurangi_saldo(user_id: int, jumlah: int, tipe: str, keterangan: str, ref_id:
     """
     with get_connection() as conn:
         conn.execute("BEGIN")
-        row = conn.execute("SELECT saldo FROM users WHERE id = ? FOR UPDATE", (user_id,)).fetchone()
+        row = conn.execute("SELECT saldo FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
             conn.execute("ROLLBACK")
             return None
