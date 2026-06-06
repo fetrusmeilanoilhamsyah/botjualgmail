@@ -32,11 +32,15 @@ _banner_cache = {
 
 async def _load_banner_cache_on_startup(bot=None, chat_id=None):
     """Panggil sekali di post_init"""
-    cached_file_id = await adb.get_setting("banner_file_id")
+    cached_file_id, cached_file_unique_id, cached_mtime = await asyncio.gather(
+        adb.get_setting("banner_file_id"),
+        adb.get_setting("banner_file_unique_id"),
+        adb.get_setting("banner_mtime")
+    )
     if cached_file_id:
         _banner_cache["file_id"] = cached_file_id
-        _banner_cache["file_unique_id"] = await adb.get_setting("banner_file_unique_id")
-        _banner_cache["mtime"] = await adb.get_setting("banner_mtime")
+        _banner_cache["file_unique_id"] = cached_file_unique_id
+        _banner_cache["mtime"] = cached_mtime
         _banner_cache["last_checked"] = time.time()
         logger.info("✅ Banner cache loaded on startup: file_id=%s, file_unique_id=%s, mtime=%s", cached_file_id, _banner_cache["file_unique_id"], _banner_cache["mtime"])
 
@@ -60,23 +64,27 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
     if _banner_cache["mtime"] is not None and now - _banner_cache["last_checked"] < 60:
         current_mtime = _banner_cache["mtime"]
     else:
+        def _check_disk():
+            return str(int(os.path.getmtime(BANNER_PATH))) if os.path.exists(BANNER_PATH) else ""
         try:
-            current_mtime = str(int(os.path.getmtime(BANNER_PATH))) if os.path.exists(BANNER_PATH) else ""
+            current_mtime = await asyncio.to_thread(_check_disk)
         except Exception:
             current_mtime = ""
         _banner_cache["last_checked"] = now
 
-    if _banner_cache["file_id"] is not None and _banner_cache["mtime"] == current_mtime:
+    if _banner_cache["file_id"] is not None and _banner_cache.get("file_unique_id") is not None and _banner_cache["mtime"] == current_mtime:
         banner_file_id = _banner_cache["file_id"]
         banner_file_unique_id = _banner_cache.get("file_unique_id")
     else:
         banner_file_id = None
         banner_file_unique_id = None
         if current_mtime:
-            cached_file_id = await adb.get_setting("banner_file_id")
-            cached_file_unique_id = await adb.get_setting("banner_file_unique_id")
-            cached_mtime   = await adb.get_setting("banner_mtime")
-            if cached_file_id and cached_mtime == current_mtime:
+            cached_file_id, cached_file_unique_id, cached_mtime = await asyncio.gather(
+                adb.get_setting("banner_file_id"),
+                adb.get_setting("banner_file_unique_id"),
+                adb.get_setting("banner_mtime")
+            )
+            if cached_file_id and cached_file_unique_id and cached_mtime == current_mtime:
                 banner_file_id = cached_file_id
                 banner_file_unique_id = cached_file_unique_id
                 _banner_cache["file_id"] = banner_file_id
@@ -224,11 +232,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Only register/update user profile on fresh command inputs (e.g. /start command)
     # Skipping this on callback queries avoids redundant database writes on every main menu navigation.
+    has_ref = False
     if not query:
-        await adb.upsert_user(user.id, user.username or "", user.full_name or "")
-        
         # Referral dari deep link: /start ref_12345
         if ctx.args and ctx.args[0].startswith("ref_"):
+            has_ref = True
+            await adb.upsert_user(user.id, user.username or "", user.full_name or "")
             ref_id_str = ctx.args[0][4:]
             try:
                 referrer_id = int(ref_id_str)
@@ -237,11 +246,20 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     await _proses_referral_bonus(ctx, referrer_id, user)
             except (ValueError, Exception) as e:
                 logger.warning("[start] referral error: %s", e)
-    
-    user_data, stats = await asyncio.gather(
-        adb.get_user(user.id),
-        adb.get_store_stats()
-    )
+
+    if not query and not has_ref:
+        # Optimize normal /start: upsert user, get user, and get stats in a single parallelized round trip
+        _, user_data, stats = await asyncio.gather(
+            adb.upsert_user(user.id, user.username or "", user.full_name or ""),
+            adb.get_user(user.id),
+            adb.get_store_stats()
+        )
+    else:
+        # If callback query or referral, upsert is either skipped or already executed
+        user_data, stats = await asyncio.gather(
+            adb.get_user(user.id),
+            adb.get_store_stats()
+        )
     saldo     = user_data["saldo"] if user_data else 0
 
     is_admin = user.id in ADMIN_IDS
@@ -384,38 +402,31 @@ async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user):
-    """Beri bonus saldo ke referrer, dengan deteksi bot/spam."""
+    """Beri bonus saldo ke referrer, dengan deteksi bot/spam menggunakan atomic SQL counter."""
     import time
-    import json
     from config import REFERRAL_BONUS, REFERRAL_SPAM_WINDOW, REFERRAL_SPAM_THRESHOLD
 
     # Cek sudah banned
     if await adb.is_referral_banned(referrer_id):
         return
 
-    # Track waktu referral masuk (anti-bot)
-    key = f"ref_spam_{referrer_id}"
+    # Atomic: tambahkan timestamp referral baru dan hitung yang masih dalam window
+    # Ini menghindari race condition read-modify-write dari JSON di settings table
     now = time.time()
-    raw = await adb.get_setting(key)
-    try:
-        times = json.loads(raw) if raw else []
-    except Exception:
-        times = []
-    times = [t for t in times if now - t < REFERRAL_SPAM_WINDOW]
-    times.append(now)
-    await adb.set_setting(key, json.dumps(times))
+    window_start = now - REFERRAL_SPAM_WINDOW
+    recent_count = await adb.add_referral_timestamp_and_count(referrer_id, now, window_start)
 
-    if len(times) >= REFERRAL_SPAM_THRESHOLD:
+    if recent_count >= REFERRAL_SPAM_THRESHOLD:
         # Deteksi bot — ban referral referrer
         await adb.ban_referral(referrer_id)
-        logger.warning("[referral] User %d dideteksi spam referral → BANNED", referrer_id)
+        logger.warning("[referral] User %d dideteksi spam referral → BANNED (%d dalam %ds)", referrer_id, recent_count, REFERRAL_SPAM_WINDOW)
         try:
             await ctx.bot.send_message(
                 chat_id=referrer_id,
                 text=(
                     "<b>Fitur referral kamu dinonaktifkan!</b>\n\n"
                     "Kami mendeteksi aktivitas mencurigakan: "
-                    f"{len(times)} akun mendaftar dalam {REFERRAL_SPAM_WINDOW} detik.\n\n"
+                    f"{recent_count} akun mendaftar dalam {REFERRAL_SPAM_WINDOW} detik.\n\n"
                     "Jika ini kesalahan, hubungi admin."
                 ),
                 parse_mode="HTML"

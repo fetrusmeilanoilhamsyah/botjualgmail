@@ -56,6 +56,15 @@ def generate_qr_bytes(data: str) -> io.BytesIO:
     return buf
 
 
+_http_session: aiohttp.ClientSession | None = None
+
+async def get_http_session() -> aiohttp.ClientSession:
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        _http_session = aiohttp.ClientSession()
+    return _http_session
+
+
 async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) -> dict | None:
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
@@ -67,13 +76,13 @@ async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) ->
         "amount":   amount,
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                data = await r.json()
-                if r.status == 200 and data.get("payment"):
-                    return data["payment"]
-                logger.error("[topup] Pakasir error: %s", data)
-                return None
+        session = await get_http_session()
+        async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as r:
+            data = await r.json()
+            if r.status == 200 and data.get("payment"):
+                return data["payment"]
+            logger.error("[topup] Pakasir error: %s", data)
+            return None
     except Exception as e:
         logger.error("[topup] Pakasir request gagal: %s", e)
         return None
@@ -90,11 +99,11 @@ async def _cek_status_pakasir_async(order_id: str, amount: int) -> dict | None:
         "amount":   amount,
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                data = await r.json()
-                if r.status == 200 and data.get("transaction"):
-                    return data["transaction"]
+        session = await get_http_session()
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as r:
+            data = await r.json()
+            if r.status == 200 and data.get("transaction"):
+                return data["transaction"]
         return None
     except Exception as e:
         logger.error("[topup] Pakasir status check gagal: %s", e)

@@ -56,6 +56,38 @@ def _verify_hmac(raw_body: bytes, signature: str, secret: str) -> bool:
         return False
 
 
+async def _safe_eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int):
+    """
+    Wrapper aman untuk eksekusi_direct_purchase agar jika terjadi uncaught exception
+    di background task, kita tetap mencatat log dan mengirim alert darurat ke admin (Bug #3).
+    """
+    try:
+        from handlers.beli import eksekusi_direct_purchase
+        await eksekusi_direct_purchase(bot, order_id, user_id, amount)
+    except Exception as e:
+        logger.exception("[Webhook-gmail] Uncaught exception in eksekusi_direct_purchase: %s", e)
+        try:
+            from config import ADMIN_NOTIF_CHATS
+            for admin_chat_id in ADMIN_NOTIF_CHATS:
+                try:
+                    await bot.send_message(
+                        chat_id=admin_chat_id,
+                        text=(
+                            f"🚨 <b>FATAL CRASH WINDOW (BACKGROUND TASK)</b>\n\n"
+                            f"• Order ID: <code>{order_id}</code>\n"
+                            f"• User ID: <code>{user_id}</code>\n"
+                            f"• Nominal: <b>Rp {amount:,}</b>\n"
+                            f"• Detail: <code>{str(e)}</code>\n\n"
+                            f"<i>Crash terjadi di background task. Saldo user mungkin sudah bertambah tapi akun belum terkirim. Mohon cek database segera!</i>"
+                        ),
+                        parse_mode="HTML"
+                    )
+                except Exception as inner_err:
+                    logger.error("Failed sending fatal alert to admin %s: %s", admin_chat_id, inner_err)
+        except Exception as admin_err:
+            logger.error("Failed to notify admins of fatal direct purchase crash: %s", admin_err)
+
+
 async def handle_pakasir_webhook(request: web.Request) -> web.Response:
     """
     POST /webhook/gmail
@@ -166,8 +198,7 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                         logger.debug("[Webhook-gmail] Gagal hapus QR: %s", e)
 
                 if not order_id.startswith("TU-"):
-                    from handlers.beli import eksekusi_direct_purchase
-                    asyncio.create_task(eksekusi_direct_purchase(bot, order_id, topup["user_id"], topup["jumlah"]))
+                    asyncio.create_task(_safe_eksekusi_direct_purchase(bot, order_id, topup["user_id"], topup["jumlah"]))
                 else:
                     # Notif user
                     def fmt_rupiah(n):

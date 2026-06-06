@@ -222,6 +222,24 @@ def init_db():
             )
         """)
 
+        # ── referral_spam_log — atomic counter untuk anti-spam referral ──
+        # (menggantikan JSON di settings table yang rawan race condition)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS referral_spam_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                referrer_id INTEGER NOT NULL,
+                ts          REAL    NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ref_spam_log ON referral_spam_log(referrer_id, ts)")
+
+        # ── Migrasi: tambah harga_beli ke topup jika belum ada (Bug #5 fix) ──
+        try:
+            conn.execute("ALTER TABLE topup ADD COLUMN harga_beli INTEGER DEFAULT NULL")
+            print("✅ [botjualgmail] Migrasi: kolom harga_beli ditambahkan ke tabel topup")
+        except Exception:
+            pass  # kolom sudah ada
+
         # ── INDEXES ───────────────────────────────────────────────────────
         conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_paket   ON stok_gmail(paket_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_stok_terjual ON stok_gmail(terjual)")
@@ -235,6 +253,9 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_status ON topup(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_garansi_beli ON garansi(pembelian_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_ref    ON users(referral_by)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_beli_created ON pembelian(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_created ON topup(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_created ON transaksi(created_at)")
 
         # Version check
         ver = conn.execute("SELECT MAX(version) as v FROM schema_version").fetchone()["v"]
@@ -513,7 +534,7 @@ def update_harga_satuan(harga_satuan: int) -> bool:
     with get_connection() as conn:
         conn.execute("BEGIN")
         conn.execute("UPDATE paket_gmail SET harga = kuantitas * ?", (harga_satuan,))
-        conn.commit()
+        conn.execute("COMMIT")  # BUKAN conn.commit() — isolation_level=None = autocommit, conn.commit() adalah no-op
     return True
 
 
@@ -894,24 +915,33 @@ def get_admin_stats() -> dict:
             total_user   = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
             total_saldo  = conn.execute("SELECT COALESCE(SUM(saldo),0) as s FROM users").fetchone()["s"]
             total_trx    = conn.execute("SELECT COUNT(*) as c FROM pembelian").fetchone()["c"]
+            
+            # Gunakan range query agar terindeks (cepat) dibanding menggunakan fungsi date(created_at)
+            today_start  = datetime.now().strftime("%Y-%m-%d") + " 00:00:00"
+            
             trx_hari_ini = conn.execute("""
                 SELECT COUNT(*) as c FROM pembelian
-                WHERE date(created_at)=date('now','localtime')
-            """).fetchone()["c"]
+                WHERE created_at >= ?
+            """, (today_start,)).fetchone()["c"]
+            
             omset_total = conn.execute(
                 "SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian"
             ).fetchone()["s"]
+            
             omset_hari  = conn.execute("""
                 SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian
-                WHERE date(created_at)=date('now','localtime')
-            """).fetchone()["s"]
+                WHERE created_at >= ?
+            """, (today_start,)).fetchone()["s"]
+            
             garansi_pending = conn.execute(
                 "SELECT COUNT(*) as c FROM garansi WHERE status IN ('pending','diproses')"
             ).fetchone()["c"]
+            
             topup_hari = conn.execute("""
                 SELECT COALESCE(SUM(jumlah),0) as s FROM topup
-                WHERE status='completed' AND date(created_at)=date('now','localtime')
-            """).fetchone()["s"]
+                WHERE status='completed' AND created_at >= ?
+            """, (today_start,)).fetchone()["s"]
+            
             stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
 
         res = {
@@ -1048,4 +1078,36 @@ def get_stok_totals():
     except Exception as e:
         logger.error(f"[DB] get_stok_totals exception: {e}")
         return {"tersedia": 0, "terjual": 0}
+
+def add_referral_timestamp_and_count(referrer_id: int, now: float, window_start: float) -> int:
+    """
+    Atomic: tambahkan timestamp referral baru dan hitung jumlah referral dalam window.
+    Menggantikan pola JSON read-modify-write yang rawan race condition.
+    Menggunakan transaksi SQLite eksplisit (BEGIN/COMMIT) karena pool berjalan dalam mode autocommit.
+    Return jumlah referral dalam window setelah insert.
+    """
+    with get_connection() as conn:
+        conn.execute("BEGIN")
+        try:
+            # Hapus entri lama (di luar window) untuk menjaga tabel tetap ramping
+            conn.execute(
+                "DELETE FROM referral_spam_log WHERE referrer_id=? AND ts < ?",
+                (referrer_id, window_start)
+            )
+            # Insert entri baru
+            conn.execute(
+                "INSERT INTO referral_spam_log(referrer_id, ts) VALUES (?, ?)",
+                (referrer_id, now)
+            )
+            # Hitung total dalam window (sudah termasuk yang baru diinsert)
+            row = conn.execute(
+                "SELECT COUNT(*) as c FROM referral_spam_log WHERE referrer_id=? AND ts >= ?",
+                (referrer_id, window_start)
+            ).fetchone()
+            conn.execute("COMMIT")
+            return row["c"] if row else 1
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            logger.error("[DB] add_referral_timestamp_and_count failed, rolled back: %s", e)
+            raise e
 

@@ -42,10 +42,12 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    stok_totals = await adb.get_stok_totals()
+    stok_totals, harga_satuan = await asyncio.gather(
+        adb.get_stok_totals(),
+        adb.get_harga_satuan()
+    )
     total_tersedia = stok_totals["tersedia"]
     total_terjual  = stok_totals["terjual"]
-    harga_satuan = await adb.get_harga_satuan()
 
     teks = (
         "<b>📦 KELOLA STOK GMAIL</b>\n\n"
@@ -71,10 +73,12 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer("Di-refresh")
-    stok_totals = await adb.get_stok_totals()
+    stok_totals, harga_satuan = await asyncio.gather(
+        adb.get_stok_totals(),
+        adb.get_harga_satuan()
+    )
     total_tersedia = stok_totals["tersedia"]
     total_terjual  = stok_totals["terjual"]
-    harga_satuan = await adb.get_harga_satuan()
 
     teks = (
         "<b>📦 KELOLA STOK GMAIL</b>\n\n"
@@ -316,8 +320,10 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
-    harga_satuan = await adb.get_harga_satuan()
-    paket_list = await adb.get_all_paket()
+    harga_satuan, paket_list = await asyncio.gather(
+        adb.get_harga_satuan(),
+        adb.get_all_paket()
+    )
     teks = (
         f"<b>🏷️ KELOLA PAKET & HARGA</b>\n\n"
         f"<blockquote>• Harga Satuan : <b>{fmt_rupiah(harga_satuan)} / Gmail</b></blockquote>\n"
@@ -349,10 +355,11 @@ async def admin_edit_harga_satuan_start(update: Update, ctx: ContextTypes.DEFAUL
     await q.answer()
     db.set_session(update.effective_user.id, "admin_edit_harga_satuan", {"menu_msg_id": q.message.message_id})
     from handlers.start import kirim_atau_edit_menu
+    harga_satuan = await adb.get_harga_satuan()
     await kirim_atau_edit_menu(
         update, ctx,
         f"<b>💰 EDIT HARGA SATUAN</b>\n\n"
-        f"<blockquote>• Harga Saat Ini : <b>{fmt_rupiah(await adb.get_harga_satuan())}</b></blockquote>\n"
+        f"<blockquote>• Harga Saat Ini : <b>{fmt_rupiah(harga_satuan)}</b></blockquote>\n"
         f"Ketik harga baru per 1 Gmail (hanya angka, contoh: <code>4500</code>):",
         InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_paket", style="danger")]])
     )

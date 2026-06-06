@@ -23,10 +23,12 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await q.answer()
 
-    stats   = await adb.get_referral_stats(user.id)
+    stats, saldo = await asyncio.gather(
+        adb.get_referral_stats(user.id),
+        adb.get_saldo(user.id)
+    )
     is_ban  = stats.get("referral_banned", 0)
     count   = stats.get("referral_count", 0)
-    saldo   = await adb.get_saldo(user.id)
 
     bot_username = ctx.bot.username or BOT_USERNAME
     link = f"https://t.me/{bot_username}?start=ref_{user.id}"

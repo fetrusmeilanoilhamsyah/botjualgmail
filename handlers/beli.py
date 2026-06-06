@@ -45,7 +45,10 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
-    paket_list = await adb.get_paket_aktif()
+    paket_list, saldo = await asyncio.gather(
+        adb.get_paket_aktif(),
+        adb.get_saldo(update.effective_user.id)
+    )
     from handlers.start import kirim_atau_edit_menu
     if not paket_list:
         await kirim_atau_edit_menu(
@@ -58,8 +61,6 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ]])
         )
         return
-
-    saldo = await adb.get_saldo(update.effective_user.id)
     teks  = (
         f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>KATALOG GMAIL</b>\n\n"
         f"<blockquote>• Saldo    : <b>{fmt_rupiah(saldo)}</b></blockquote>\n"
@@ -96,13 +97,14 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     paket_id = int(q.data.split(":", 1)[1])
     await q.answer()
 
-    paket = await adb.get_paket_by_id(paket_id)
+    paket, saldo = await asyncio.gather(
+        adb.get_paket_by_id(paket_id),
+        adb.get_saldo(user.id)
+    )
     if not paket:
         from handlers.start import edit_menu_caption_or_text
         await edit_menu_caption_or_text(ctx, user.id, q.message.message_id, "Paket tidak ditemukan.", None)
         return
-
-    saldo = await adb.get_saldo(user.id)
 
     if paket["stok_tersedia"] < paket["kuantitas"]:
         from handlers.start import kirim_atau_edit_menu
@@ -150,10 +152,14 @@ async def show_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
+    harga_satuan, total_stok = await asyncio.gather(
+        adb.get_harga_satuan(),
+        adb.get_stok_count()
+    )
     teks = (
         f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>BELI CUSTOM</b>\n\n"
-        f"<blockquote>• Rate     : <b>{fmt_rupiah(await adb.get_harga_satuan())} / Pcs</b>\n"
-        f"• Stok     : <b>{await adb.get_stok_count():,} Pcs</b></blockquote>\n"
+        f"<blockquote>• Rate     : <b>{fmt_rupiah(harga_satuan)} / Pcs</b>\n"
+        f"• Stok     : <b>{total_stok:,} Pcs</b></blockquote>\n"
         f"Ketik jumlah Gmail yang ingin Anda beli (contoh: <code>15</code>):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]]
@@ -215,9 +221,11 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
     db.clear_session(user.id)
     db.set_session(user.id, "waiting_beli_custom_confirm", {"qty": qty, "menu_msg_id": menu_msg_id})
 
-    harga_satuan = await adb.get_harga_satuan()
+    harga_satuan, saldo = await asyncio.gather(
+        adb.get_harga_satuan(),
+        adb.get_saldo(user.id)
+    )
     total_harga = qty * harga_satuan
-    saldo = await adb.get_saldo(user.id)
 
     cukup = saldo >= total_harga
     status_saldo = "Saldo mencukupi" if cukup else f"Saldo kurang {fmt_short_rupiah(total_harga - saldo)} ({fmt_rupiah(total_harga - saldo)})"
@@ -283,10 +291,11 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         qty = session["data"]["qty"]
         db.clear_session(user.id)
 
-        harga_satuan = await adb.get_harga_satuan()
+        harga_satuan, saldo = await asyncio.gather(
+            adb.get_harga_satuan(),
+            adb.get_saldo(user.id)
+        )
         total_harga = qty * harga_satuan
-
-        saldo = await adb.get_saldo(user.id)
         if saldo < total_harga:
             await kirim_atau_edit_menu(
                 update, ctx,
@@ -477,7 +486,10 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.answer("Memproses...")
 
         from handlers.start import kirim_atau_edit_menu
-        paket = await adb.get_paket_by_id(paket_id)
+        paket, saldo = await asyncio.gather(
+            adb.get_paket_by_id(paket_id),
+            adb.get_saldo(user.id)
+        )
         if not paket:
             await kirim_atau_edit_menu(
                 update, ctx,
@@ -487,8 +499,6 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ]])
             )
             return
-
-        saldo = await adb.get_saldo(user.id)
         if saldo < paket["harga"]:
             await kirim_atau_edit_menu(
                 update, ctx,
@@ -935,6 +945,10 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
         return
     _pending_purchases.add(user_id)
 
+    # Inisialisasi variabel untuk fail-safe rollback stok
+    akun_list = None
+    pembelian_sukses = False
+
     try:
         parts = order_id.split("-")
         is_paket = parts[0] == "DIR"
@@ -982,20 +996,10 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
                 )
                 return
 
-            # Potong saldo
-            result = await adb.kurangi_saldo(user_id, paket["harga"], "beli", f"Beli {paket['nama']}")
+            # Potong saldo (Bug #5: gunakan 'amount' yang dibayar user daripada paket['harga'] dinamis)
+            result = await adb.kurangi_saldo(user_id, amount, "beli", f"Beli {paket['nama']}")
             if result is None:
-                await adb.rollback_stok([a["id"] for a in akun_list])
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        f"<b>Pembayaran Berhasil!</b>\n\n"
-                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
-                        f"⚠️ Namun, pemotongan saldo gagal diproses. Saldo Anda tetap aman."
-                    ),
-                    parse_mode="HTML"
-                )
-                return
+                raise Exception("Gagal memotong saldo (saldo tidak cukup atau db error)")
 
             stok_ids = [a["id"] for a in akun_list]
             await adb.tandai_stok_terjual_ke(stok_ids, user_id)
@@ -1003,10 +1007,11 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
             pembelian_id = await adb.create_pembelian(
                 user_id=user_id,
                 paket_id=paket_id,
-                harga_bayar=paket["harga"],
+                harga_bayar=amount,  # Bug #5: gunakan amount
                 jumlah_akun=paket["kuantitas"],
                 stok_ids=stok_ids
             )
+            pembelian_sukses = True
 
             use_file_delivery = (paket["kuantitas"] > 5) or (len(_format_akun(akun_list)) > 3000)
             if use_file_delivery:
@@ -1014,7 +1019,7 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
                     f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
                     f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
                     f"• Paket    : <b>{paket['nama']}</b>\n"
-                    f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(amount)}</b>\n"
                     f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
                     f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
                     f"Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
@@ -1025,7 +1030,7 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
                     f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
                     f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
                     f"• Paket    : <b>{paket['nama']}</b>\n"
-                    f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(amount)}</b>\n"
                     f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
                     f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
                     f"<b>DATA AKUN GMAIL:</b>\n"
@@ -1038,14 +1043,13 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
             if use_file_delivery:
                 await send_txt_file_delivery(bot, user_id, pembelian_id, akun_list)
 
-            await notify_admin_and_live_tx(bot, user_id, pembelian_id, paket["harga"], paket["nama"], paket["kuantitas"])
+            await notify_admin_and_live_tx(bot, user_id, pembelian_id, amount, paket["nama"], paket["kuantitas"])
 
         else:
             qty = int(parts[2])
-            harga_satuan = await adb.get_harga_satuan()
-            total_harga = qty * harga_satuan
-
             total_stok = await adb.get_stok_count()
+            # Bug #5: gunakan amount (harga yang dibayar user saat invoice dibuat) bukan dihitung ulang dari harga satuan saat ini
+            total_harga = amount
             if total_stok < qty:
                 await bot.send_message(
                     chat_id=user_id,
@@ -1075,17 +1079,7 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
 
             result = await adb.kurangi_saldo(user_id, total_harga, "beli", f"Beli {qty} Gmail Custom")
             if result is None:
-                await adb.rollback_stok([a["id"] for a in akun_list])
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        f"<b>Pembayaran Berhasil!</b>\n\n"
-                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
-                        f"⚠️ Namun, pemotongan saldo gagal diproses. Saldo Anda tetap aman."
-                    ),
-                    parse_mode="HTML"
-                )
-                return
+                raise Exception("Gagal memotong saldo (saldo tidak cukup atau db error)")
 
             stok_ids = [a["id"] for a in akun_list]
             await adb.tandai_stok_terjual_ke(stok_ids, user_id)
@@ -1097,6 +1091,7 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
                 jumlah_akun=qty,
                 stok_ids=stok_ids
             )
+            pembelian_sukses = True
 
             use_file_delivery = (qty > 5) or (len(_format_akun(akun_list)) > 3000)
             if use_file_delivery:
@@ -1132,6 +1127,35 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
 
     except Exception as e:
         logger.exception("[beli] Error dalam eksekusi_direct_purchase: %s", e)
+        # Bug #1: Kembalikan status stok (rollback) jika stok terlanjur diambil tapi proses pembelian gagal sebelum tercatat
+        if akun_list and not pembelian_sukses:
+            try:
+                stok_ids = [a["id"] for a in akun_list]
+                await adb.rollback_stok(stok_ids)
+                logger.info("[beli] Berhasil rollback stok untuk %d akun: %s", len(stok_ids), stok_ids)
+            except Exception as rollback_err:
+                logger.error("[beli] Gagal rollback stok saat recovery: %s", rollback_err)
+
+        # Kirim notifikasi kegagalan ke admin untuk pemulihan manual
+        try:
+            for admin_chat_id in ADMIN_NOTIF_CHATS:
+                try:
+                    await bot.send_message(
+                        chat_id=admin_chat_id,
+                        text=(
+                            f"🚨 <b>GAGAL EKSEKUSI PEMBELIAN LANGSUNG</b>\n\n"
+                            f"• Order ID: <code>{order_id}</code>\n"
+                            f"• User ID: <code>{user_id}</code>\n"
+                            f"• Nominal: <b>Rp {amount:,}</b>\n"
+                            f"• Error: <code>{str(e)}</code>\n\n"
+                            f"<i>Saldo pengguna mungkin sudah ditambahkan, tetapi produk gagal dikirim otomatis. Mohon periksa secara manual.</i>"
+                        ),
+                        parse_mode="HTML"
+                    )
+                except Exception as inner_err:
+                    logger.error("Failed sending failed purchase notification to admin %s: %s", admin_chat_id, inner_err)
+        except Exception as admin_err:
+            logger.error("Failed to notify admins of direct purchase failure: %s", admin_err)
     finally:
         _pending_purchases.discard(user_id)
 

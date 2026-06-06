@@ -94,11 +94,11 @@ def main():
     else:
         logger.info("🌐 Menggunakan Telegram API resmi")
 
-    # Set up high concurrency parameters matching botcv's performance
+    # Set up concurrency parameters matching the DB thread/connection pool (32)
     app: Application = (
         builder
-        .concurrent_updates(128)
-        .connection_pool_size(128)
+        .concurrent_updates(32)
+        .connection_pool_size(32)
         .pool_timeout(30)
         .read_timeout(20)
         .write_timeout(20)
