@@ -108,13 +108,13 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Silakan pilih paket pengganti di bawah:"
     )
     kb = [[InlineKeyboardButton(
-        f"{p['nama']} (stok: {p['stok_tersedia']})",
+        f"{p['nama']}",
         callback_data=f"admin_kirim_pengganti:{garansi_id}:{p['id']}",
         style="primary"
-    )] for p in paket_list if p["stok_tersedia"] > 0]
+    )] for p in paket_list if p["stok_tersedia"] >= p["kuantitas"]]
     kb.append([InlineKeyboardButton("Batal", callback_data="admin_garansi_list", style="danger")])
 
-    if not any(True for p in paket_list if p["stok_tersedia"] > 0):
+    if not any(True for p in paket_list if p["stok_tersedia"] >= p["kuantitas"]):
         from handlers.start import kirim_atau_edit_menu
         await kirim_atau_edit_menu(
             update, ctx,

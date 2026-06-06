@@ -340,7 +340,7 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for p in paket_list:
         status = "🟢" if p["aktif"] else "🔴"
         teks += f"• {status} <b>#{p['id']} {p['nama']}</b>\n"
-        teks += f"  Harga: {fmt_short_rupiah(p['harga'])} | Stok: {p['stok_tersedia']} Pcs\n\n"
+        teks += f"  Harga: {fmt_short_rupiah(p['harga'])}\n\n"
 
     kb = [
         [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="primary")],
