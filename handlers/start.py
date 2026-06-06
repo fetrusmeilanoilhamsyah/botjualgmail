@@ -39,19 +39,43 @@ async def _load_banner_cache_on_startup(bot=None, chat_id=None):
         logger.info("✅ Banner cache loaded on startup: file_id=%s, mtime=%s", cached_file_id, _banner_cache["mtime"])
 
 
-async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
+async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup, show_banner: bool = False):
     """
-    Helper untuk mengirim atau mengedit menu dengan menyertakan banner.
-    Jika banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel!).
-    Jika banner tidak ada, fallback ke teks biasa.
+    Helper untuk mengirim atau mengedit menu.
+    Jika show_banner=True dan banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel!).
+    Jika show_banner=False atau banner tidak ada, akan dikirim/di-edit sebagai teks biasa.
     """
     user = update.effective_user
     q = update.callback_query
     
+    if not show_banner:
+        # Tampilkan sebagai teks biasa (sangat lancar, cepat, dan hemat kuota!)
+        if q:
+            if q.message.photo:
+                # Pesan lama adalah foto banner (misal dari menu utama) -> hapus dan kirim teks baru
+                try:
+                    await q.message.delete()
+                except Exception:
+                    pass
+                await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+            else:
+                # Pesan lama sudah teks -> edit teks langsung (1 API call, sangat cepat!)
+                try:
+                    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    try:
+                        await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+                    except Exception:
+                        pass
+        else:
+            # Command /start atau input non-callback
+            await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+        return
+
+    # Dari sini ke bawah adalah case show_banner=True (misal Menu Utama)
     import time
     now = time.time()
     
-    # ── LANGKAH 2: Cek banner (dengan throttling disk check 60 detik) ──────────
     # Throttle disk checks to at most once every 60 seconds
     if _banner_cache["mtime"] is not None and now - _banner_cache["last_checked"] < 60:
         current_mtime = _banner_cache["mtime"]
@@ -114,8 +138,7 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
             _banner_cache["mtime"] = None
             _banner_cache["last_checked"] = now
 
-    # ── LANGKAH 3: Kirim/Edit pesan menu ──────────────────────────────────────
-    if banner_file_id and len(teks) <= 1000:
+    if banner_file_id and len(teks) <= 1024:
         if q:
             if q.message.photo:
                 # FAST PATH: Pesan lama sudah foto → edit caption saja (1 API call, sangat cepat!)
@@ -125,7 +148,6 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
                 except Exception:
                     pass
             # Pesan lama adalah teks → hapus dan kirim foto banner
-            # (Tidak bisa mengubah teks menjadi foto via edit, jadi perlu delete+send)
             try:
                 await q.message.delete()
             except Exception:
@@ -141,7 +163,7 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
             # Command /start atau input non-callback
             await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
     else:
-        # Fallback: tidak ada banner atau teks > 1000 karakter
+        # Fallback: tidak ada banner atau teks > 1024 karakter
         if q:
             if q.message.photo:
                 # Pesan lama adalah foto, hapus dan kirim teks
@@ -307,7 +329,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ])
 
     markup = InlineKeyboardMarkup(keyboard)
-    await kirim_atau_edit_menu(update, ctx, teks, markup)
+    await kirim_atau_edit_menu(update, ctx, teks, markup, show_banner=True)
 
 
 async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
