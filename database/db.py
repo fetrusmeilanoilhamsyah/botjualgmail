@@ -431,7 +431,6 @@ def get_user_topups(user_id: int, limit: int = 10) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_paket_aktif() -> list:
-    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
         rows = conn.execute("""
             SELECT p.* FROM paket_gmail p
@@ -441,25 +440,29 @@ def get_paket_aktif() -> list:
         res = []
         for r in rows:
             d = dict(r)
-            d["stok_tersedia"] = total_stok
+            d["stok_tersedia"] = conn.execute(
+                "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
+                (d["id"],)
+            ).fetchone()[0]
             res.append(d)
         return res
 
 
 def get_paket_by_id(paket_id: int) -> dict | None:
-    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
         row = conn.execute("SELECT p.* FROM paket_gmail p WHERE p.id=?", (paket_id,)).fetchone()
         if not row:
             return None
         d = dict(row)
-        d["stok_tersedia"] = total_stok
+        d["stok_tersedia"] = conn.execute(
+            "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
+            (d["id"],)
+        ).fetchone()[0]
         return d
 
 
 def get_all_paket() -> list:
     """Untuk admin: tampilkan semua paket termasuk nonaktif."""
-    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
         rows = conn.execute("""
             SELECT p.*, COUNT(s.id) as stok_total
@@ -471,7 +474,10 @@ def get_all_paket() -> list:
         res = []
         for r in rows:
             d = dict(r)
-            d["stok_tersedia"] = total_stok
+            d["stok_tersedia"] = conn.execute(
+                "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
+                (d["id"],)
+            ).fetchone()[0]
             res.append(d)
         return res
 
@@ -563,19 +569,29 @@ def bulk_add_stok(paket_id: int, lines: list) -> tuple[int, int]:
 
 def ambil_stok(jumlah: int, paket_id: int = None) -> list | None:
     """
-    ATOMIC: Ambil N akun dari stok (secara global / pooled).
+    ATOMIC: Ambil N akun dari stok (per paket atau global).
     """
     with get_connection() as conn:
         conn.execute("BEGIN")
         now = datetime.now().isoformat()
-        rows = conn.execute("""
-            UPDATE stok_gmail SET terjual=1, terjual_at=?
-            WHERE id IN (
-                SELECT id FROM stok_gmail
-                WHERE terjual=0 LIMIT ?
-            )
-            RETURNING id, email, password, recovery, tgl_buat, catatan
-        """, (now, jumlah)).fetchall()
+        if paket_id is not None:
+            rows = conn.execute("""
+                UPDATE stok_gmail SET terjual=1, terjual_at=?
+                WHERE id IN (
+                    SELECT id FROM stok_gmail
+                    WHERE terjual=0 AND paket_id=? LIMIT ?
+                )
+                RETURNING id, email, password, recovery, tgl_buat, catatan
+            """, (now, paket_id, jumlah)).fetchall()
+        else:
+            rows = conn.execute("""
+                UPDATE stok_gmail SET terjual=1, terjual_at=?
+                WHERE id IN (
+                    SELECT id FROM stok_gmail
+                    WHERE terjual=0 LIMIT ?
+                )
+                RETURNING id, email, password, recovery, tgl_buat, catatan
+            """, (now, jumlah)).fetchall()
 
         if len(rows) < jumlah:
             conn.execute("ROLLBACK")

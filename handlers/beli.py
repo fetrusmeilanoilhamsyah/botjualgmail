@@ -497,8 +497,8 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Ambil stok pooled
-        akun_list = await adb.ambil_stok(jumlah=paket["kuantitas"])
+        # Ambil stok per paket
+        akun_list = await adb.ambil_stok(jumlah=paket["kuantitas"], paket_id=paket_id)
         if akun_list is None:
             await kirim_atau_edit_menu(
                 update, ctx,
