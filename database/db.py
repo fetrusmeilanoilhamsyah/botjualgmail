@@ -551,30 +551,26 @@ def bulk_add_stok(paket_id: int, lines: list) -> tuple[int, int]:
         conn.commit()
     return ok, dup
 
-
 def ambil_stok(jumlah: int, paket_id: int = None) -> list | None:
     """
     ATOMIC: Ambil N akun dari stok (secara global / pooled).
     """
     with get_connection() as conn:
         conn.execute("BEGIN")
+        now = datetime.now().isoformat()
         rows = conn.execute("""
-            SELECT id, email, password, recovery, tgl_buat, catatan
-            FROM stok_gmail
-            WHERE terjual=0
-            LIMIT ?
-        """, (jumlah,)).fetchall()
+            UPDATE stok_gmail SET terjual=1, terjual_at=?
+            WHERE id IN (
+                SELECT id FROM stok_gmail
+                WHERE terjual=0 LIMIT ?
+            )
+            RETURNING id, email, password, recovery, tgl_buat, catatan
+        """, (now, jumlah)).fetchall()
 
         if len(rows) < jumlah:
             conn.execute("ROLLBACK")
             return None
 
-        ids = [r["id"] for r in rows]
-        now = datetime.now().isoformat()
-        conn.executemany(
-            "UPDATE stok_gmail SET terjual=1, terjual_at=? WHERE id=?",
-            [(now, sid) for sid in ids]
-        )
         conn.execute("COMMIT")
     return [dict(r) for r in rows]
 
