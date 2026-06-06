@@ -344,8 +344,8 @@ async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
     
     teks = (
-        "<tg-emoji emoji-id=\"6003735582495216112\">⚡️</tg-emoji> <b>Customer Service - Warung Gmail</b>\n\n"
-        "Silakan hubungi salah satu admin di bawah untuk bantuan:"
+        f"<tg-emoji emoji-id=\"6003735582495216112\">⚡️</tg-emoji> <b>CUSTOMER SERVICE</b>\n\n"
+        f"<blockquote>Silakan hubungi salah satu admin di bawah untuk mendapatkan bantuan atau mengajukan pertanyaan.</blockquote>"
     )
     
     kb = []
