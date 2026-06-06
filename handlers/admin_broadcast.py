@@ -29,13 +29,14 @@ async def cmd_broadcast_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     teks = (
         "<b>📢 BROADCAST PESAN BARU</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        "Silakan ketik pesan yang ingin Anda siarkan ke seluruh pengguna bot.\n"
-        "Mendukung format HTML seperti:\n"
+        "Tulis pesan yang ingin disiarkan ke semua pengguna.\n"
+        "Format HTML didukung:\n"
         "• <b>Teks Tebal</b>\n"
         "• <i>Teks Miring</i>\n"
-        "• <code>Teks Monospace (Kode)</code>\n"
-        "• <a href=\"https://t.me/\">Link Teks</a>\n\n"
-        "Ketik pesan Anda sekarang dan kirimkan ke chat ini..."
+        "• <code>Monospace (Kode)</code>\n"
+        "• <a href=\"https://t.me/\">Link</a>\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Silakan ketik dan kirim pesan Anda sekarang..."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
     msg = await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -65,13 +66,12 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     preview = (
         f"<b>🚨 PREVIEW SIARAN PESAN</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"<b>Isi Pesan Broadcast:</b>\n"
+        f"<b>Isi Pesan:</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"{pesan}\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎯 <b>Target Penerima:</b> {total_user:,} pengguna\n"
-        f"⚠️ <i>Mohon periksa kembali keselarasan format teks sebelum mengirim.</i>\n\n"
-        f"Apakah Anda ingin menyiarkan pesan ini sekarang?"
+        f"🎯 Target: {total_user:,} pengguna\n\n"
+        f"Kirim siaran pesan ini sekarang?"
     )
     kb = [
         [
@@ -118,7 +118,7 @@ async def admin_broadcast_reedit(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     await q.edit_message_text(
         "<b>✏️ EDIT PESAN BROADCAST</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        "Silakan ketik ulang pesan broadcast Anda ke chat ini...",
+        "Silakan ketik ulang pesan broadcast Anda...",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]])
     )
@@ -149,10 +149,10 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     gagal     = 0
 
     await q.edit_message_text(
-        f"<b>⏳ MENGIRIM BROADCAST...</b>\n"
+        f"<b>⏳ PROSES PENGIRIMAN...</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Pesan sedang disiarkan ke <b>{total:,}</b> pengguna.\n"
-        f"Mohon tunggu sampai proses pengiriman selesai sepenuhnya..."
+        f"Siaran sedang dikirim ke {total:,} user.\n"
+        f"Harap tunggu hingga selesai..."
     )
 
     for uid in user_ids:
@@ -167,13 +167,12 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     await adb.log_broadcast(user.id, pesan, sukses, gagal)
 
     teks_selesai = (
-        f"<b>📢 PROSES BROADCAST SELESAI!</b>\n"
+        f"<b>📢 SIARAN SELESAI</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"📊 <b>Laporan Hasil Siaran:</b>\n"
-        f"• ✅ <b>Sukses Terkirim:</b> {sukses:,} user\n"
-        f"• ❌ <b>Gagal Terkirim:</b> {gagal:,} user\n"
-        f"• 👥 <b>Total Target:</b> {total:,} user\n\n"
-        f"Riwayat siaran broadcast telah berhasil direkam ke database."
+        f"• Sukses : {sukses:,} user\n"
+        f"• Gagal  : {gagal:,} user\n"
+        f"• Total  : {total:,} user\n\n"
+        f"━━━━━━━━━━━━━━━━━━"
     )
     kb = [[
         InlineKeyboardButton(
