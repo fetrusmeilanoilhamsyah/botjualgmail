@@ -59,8 +59,8 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not riwayat:
         await kirim_atau_edit_menu(
             update, ctx,
-            "<b>Riwayat Pembelian - Warung Gmail</b>\n\n"
-            "Anda belum pernah melakukan pembelian akun.",
+            f"<tg-emoji emoji-id=\"5253742260054409879\">📋</tg-emoji> <b>RIWAYAT PEMBELIAN</b>\n\n"
+            f"<blockquote>Anda belum pernah melakukan pembelian akun.</blockquote>",
             InlineKeyboardMarkup([[
                 InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="primary"),
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
@@ -73,15 +73,16 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     end     = min(start + PAGE_SIZE, total)
     items   = riwayat[start:end]
 
-    teks = f"<b>Riwayat Pembelian</b> (Halaman {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
+    teks = f"<tg-emoji emoji-id=\"5253742260054409879\">📋</tg-emoji> <b>RIWAYAT PEMBELIAN</b> (Hal {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
 
     kb = []
     for r in items:
-        status_text = {"aktif": "[Aktif]", "klaim_garansi": "[Garansi]", "selesai": "[Selesai]"}.get(r["status"], "[Selesai]")
+        status_text = {"aktif": "Aktif", "klaim_garansi": "Garansi", "selesai": "Selesai"}.get(r["status"], "Selesai")
         teks += (
-            f"<b>{status_text} #{r['id']}</b> – {r['paket_nama']}\n"
-            f"   Harga: {fmt_short_rupiah(r['harga_bayar'])} | Tanggal: {fmt_dt(r['created_at'])}\n"
-            f"   Garansi s/d: {fmt_dt(r['garansi_until'])}\n\n"
+            f"<b>Invoice #{r['id']}</b> ({status_text})\n"
+            f"<blockquote>• Item     : <b>{r['paket_nama']}</b>\n"
+            f"• Total    : <b>{fmt_rupiah(r['harga_bayar'])}</b>\n"
+            f"• Tanggal  : <b>{fmt_dt(r['created_at'])}</b></blockquote>\n\n"
         )
         kb.append([InlineKeyboardButton(
             f"Lihat Data Akun #{r['id']}",
@@ -119,23 +120,19 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     use_file_delivery = (len(akun_list) > 5)
 
     teks = (
-        f"<b>Detail Pesanan #{pembelian_id}</b>\n"
-        f"Paket: {detail['paket_nama']}\n"
-        f"Total Bayar: {fmt_short_rupiah(detail['harga_bayar'])} ({fmt_rupiah(detail['harga_bayar'])})\n"
-        f"Tanggal: {fmt_dt(detail['created_at'])}\n"
-        f"Garansi s/d: {fmt_dt(detail['garansi_until'])}\n\n"
+        f"<tg-emoji emoji-id=\"5253742260054409879\">📋</tg-emoji> <b>DETAIL PESANAN #{pembelian_id}</b>\n\n"
+        f"<blockquote>• Item     : <b>{detail['paket_nama']}</b>\n"
+        f"• Total    : <b>{fmt_rupiah(detail['harga_bayar'])}</b>\n"
+        f"• Tanggal  : <b>{fmt_dt(detail['created_at'])}</b>\n"
+        f"• Garansi  : <b>{fmt_dt(detail['garansi_until'])}</b></blockquote>\n\n"
     )
 
     if use_file_delivery:
-        teks += "Karena jumlah pembelian yang besar, data akun lengkap dikirim dalam bentuk file .txt di bawah ini."
+        teks += "Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
     else:
-        teks += (
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<b>DATA AKUN GMAIL</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        )
+        teks += "<b>DATA AKUN GMAIL:</b>\n"
         for i, a in enumerate(akun_list, 1):
-            teks += f"\n<b>Akun #{i}</b>\n"
+            teks += f"\n• <b>Akun #{i}</b>\n"
             teks += f"   Email   : <code>{a['email']}</code>\n"
             teks += f"   Password: <code>{a['password']}</code>\n"
             if a.get("recovery"):
@@ -234,7 +231,8 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not mutasi:
         await kirim_atau_edit_menu(
             update, ctx,
-            "<b>Riwayat Mutasi - Warung Gmail</b>\n\nBelum ada riwayat transaksi.",
+            f"<tg-emoji emoji-id=\"5253742260054409879\">📋</tg-emoji> <b>RIWAYAT MUTASI</b>\n\n"
+            f"<blockquote>Belum ada riwayat transaksi.</blockquote>",
             InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
@@ -246,15 +244,16 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     end   = min(start + PAGE_SIZE, total)
     items = mutasi[start:end]
 
-    teks = f"<b>Riwayat Mutasi Saldo</b> (Halaman {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
+    teks = f"<tg-emoji emoji-id=\"5253742260054409879\">📋</tg-emoji> <b>RIWAYAT MUTASI SALDO</b> (Hal {page+1}/{(total-1)//PAGE_SIZE+1})\n\n"
     for m in items:
         label_tipe = TIPE_TEXT.get(m["tipe"], "[Mutasi]")
         masuk   = m["jumlah"] > 0
         sign    = "+" if masuk else "-"
         teks += (
-            f"<b>{label_tipe} {sign}{fmt_short_rupiah(abs(m['jumlah']))}</b> ({fmt_rupiah(abs(m['jumlah']))})\n"
-            f"   Keterangan: {m['keterangan']}\n"
-            f"   Tanggal: {fmt_dt(m['created_at'])} | Saldo: {fmt_rupiah(m['saldo_sesudah'])}\n\n"
+            f"<b>{label_tipe} {sign}{fmt_rupiah(abs(m['jumlah']))}</b>\n"
+            f"<blockquote>• Keterangan  : <b>{m['keterangan']}</b>\n"
+            f"• Saldo Akhir : <b>{fmt_rupiah(m['saldo_sesudah'])}</b>\n"
+            f"• Tanggal     : <b>{fmt_dt(m['created_at'])}</b></blockquote>\n\n"
         )
 
     nav = []
