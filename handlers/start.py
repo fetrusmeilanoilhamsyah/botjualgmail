@@ -224,11 +224,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     is_admin = user.id in ADMIN_IDS
     teks = (
-        f"<b>WARUNG GMAIL</b>\n\n"
-        f"Saldo Anda: <b>{fmt_rupiah(saldo)}</b>\n"
-        f"Stok Tersedia: <b>{stats['stok_tersedia']:,} Akun</b>\n"
-        f"Pengguna: <b>{stats['total_user']:,}</b> | Sukses: <b>{stats['total_trx']:,} Tx</b>\n\n"
-        f"Silakan pilih menu di bawah ini:"
+        f"<tg-emoji emoji-id=\"5440841102871517055\">🛒</tg-emoji> <b>WARUNG GMAIL</b>\n\n"
+        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo Anda: <b>{fmt_rupiah(saldo)}</b>\n"
+        f"<tg-emoji emoji-id=\"6156673548225090260\">📱</tg-emoji> Stok Tersedia: <b>{stats['stok_tersedia']:,} Akun</b>\n"
+        f"<tg-emoji emoji-id=\"6003502340001238882\">✅</tg-emoji> Pengguna: <b>{stats['total_user']:,}</b> | Sukses: <b>{stats['total_trx']:,} Tx</b>\n\n"
+        f"<tg-emoji emoji-id=\"5188481279963715781\">🚀</tg-emoji> Silakan pilih menu di bawah ini:"
     )
 
     channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
@@ -275,11 +275,11 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ref_stats = await adb.get_referral_stats(user.id)
     saldo     = fmt_rupiah(u["saldo"])
     teks = (
-        f"<b>Info Akun</b>\n\n"
+        f"<tg-emoji emoji-id=\"6158694317452956321\">😀</tg-emoji> <b>Info Akun</b>\n\n"
         f"ID: <code>{user.id}</code>\n"
         f"Nama: {user.full_name or '-'}\n"
         f"Username: @{user.username or '-'}\n\n"
-        f"Saldo: <b>{saldo}</b>\n"
+        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo: <b>{saldo}</b>\n"
         f"Total Referral: {ref_stats['referral_count']} orang\n"
         f"Bergabung: {u['joined_at'][:10]}\n"
     )
@@ -295,7 +295,7 @@ async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
     
     teks = (
-        "<b>Customer Service - Warung Gmail</b>\n\n"
+        "<tg-emoji emoji-id=\"6156562763838656912\">📢</tg-emoji> <b>Customer Service - Warung Gmail</b>\n\n"
         "Silakan hubungi salah satu admin di bawah untuk bantuan:"
     )
     
