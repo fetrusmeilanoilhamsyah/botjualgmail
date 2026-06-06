@@ -43,16 +43,19 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not valid:
         await kirim_atau_edit_menu(
             update, ctx,
-            "<b>Tidak Ada Garansi Aktif</b>\n\n"
-            "Tidak ada pembelian yang masih dalam masa garansi (24 jam).\n\n"
-            f"Jika ada masalah, hubungi admin: {ADMIN_CONTACT}",
+            f"<tg-emoji emoji-id=\"6158892349805040268\">🛡️</tg-emoji> <b>KLAIM GARANSI</b>\n\n"
+            f"<blockquote>Tidak ada pembelian yang masih dalam masa garansi (24 jam).</blockquote>\n"
+            f"Hubungi admin jika ada kendala: <b>{ADMIN_CONTACT}</b>",
             InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         return
 
-    teks = "<b>Klaim Garansi</b>\n\nPilih invoice pembelian yang ingin diklaim:"
+    teks = (
+        f"<tg-emoji emoji-id=\"6158892349805040268\">🛡️</tg-emoji> <b>KLAIM GARANSI</b>\n\n"
+        f"Pilih invoice pembelian yang ingin diklaim:"
+    )
     kb   = []
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
@@ -99,11 +102,10 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db.set_session(user.id, "waiting_garansi_alasan", {"pembelian_id": pembelian_id, "menu_msg_id": q.message.message_id})
 
     teks = (
-        f"<b>Klaim Garansi - Invoice #{pembelian_id}</b>\n\n"
-        f"Item: <b>{detail['paket_nama']}</b>\n\n"
-        "Silakan jelaskan kendala atau detail kerusakan akun yang Anda alami:\n"
-        "(Contoh: Akun salah sandi, butuh verifikasi nomor, dll)\n\n"
-        "Ketik alasan klaim:"
+        f"<tg-emoji emoji-id=\"6158892349805040268\">🛡️</tg-emoji> <b>KLAIM GARANSI #{pembelian_id}</b>\n\n"
+        f"<blockquote>• Item     : <b>{detail['paket_nama']}</b>\n"
+        f"• Invoice  : <code>#{pembelian_id}</code></blockquote>\n"
+        f"Silakan ketik alasan klaim Anda secara detail (contoh: Akun salah sandi, butuh verifikasi nomor, dll):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
     await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
@@ -128,7 +130,10 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db.clear_session(user.id)
 
     if len(alasan) < 5:
-        teks_err = "<b>Alasan terlalu singkat!</b>\n\nJelaskan kendala Anda secara lebih detail (min 5 karakter):"
+        teks_err = (
+            f"<b>❌ ALASAN TERLALU SINGKAT</b>\n\n"
+            f"<blockquote>Jelaskan kendala Anda secara lebih detail (min 5 karakter):</blockquote>"
+        )
         kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
         
         # Simpan kembali session dengan menu_msg_id
@@ -149,11 +154,10 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if garansi_id is None:
         teks_fail = (
-            "<b>Klaim Garansi Gagal</b>\n\n"
-            "Gagal membuat klaim garansi karena kemungkinan:\n"
-            "• Garansi pembelian ini sudah kadaluarsa (melebihi 24 jam)\n"
-            "• Sudah ada pengajuan klaim aktif untuk pesanan ini\n\n"
-            f"Silakan hubungi admin jika ada kendala: {ADMIN_CONTACT}"
+            f"<b>❌ KLAIM GARANSI GAGAL</b>\n\n"
+            f"<blockquote>• Penyebab : <b>Garansi kadaluarsa / sudah diklaim</b>\n"
+            f"• Invoice  : <code>#{pembelian_id}</code></blockquote>\n"
+            f"Hubungi admin jika ada kendala: <b>{ADMIN_CONTACT}</b>"
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         if menu_msg_id:
@@ -168,12 +172,12 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     teks_success = (
-        f"<b>Klaim Garansi Terkirim</b>\n\n"
-        f"No. Klaim: <code>#{garansi_id}</code>\n"
-        f"No. Invoice: <code>#{pembelian_id}</code>\n"
-        f"Alasan: {alasan}\n\n"
-        "Pengajuan klaim Anda telah dicatat. Admin kami akan segera memproses penggantian akun.\n"
-        f"Hubungi admin jika mendesak: {ADMIN_CONTACT}"
+        f"<b>✅ KLAIM GARANSI TERKIRIM</b>\n\n"
+        f"<blockquote>• ID Klaim  : <code>#{garansi_id}</code>\n"
+        f"• Invoice  : <code>#{pembelian_id}</code>\n"
+        f"• Alasan   : <b>{alasan}</b></blockquote>\n"
+        f"Pengajuan klaim telah dicatat. Admin akan segera memproses penggantian akun.\n"
+        f"Hubungi admin jika mendesak: <b>{ADMIN_CONTACT}</b>"
     )
     kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
     if menu_msg_id:
