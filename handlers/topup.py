@@ -337,40 +337,45 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     order_id = q.data.split(":", 1)[1]
 
-    # Anti-Spam Check
+    # Anti-Spam: jawab DULU agar spinner berhenti dan notif muncul di atas
     if order_id in _pending_topup_checks:
-        await q.answer("Status sedang diperiksa. Mohon tunggu sebentar...", show_alert=True)
+        await q.answer("⏳ Sedang diperiksa, tunggu sebentar...", show_alert=False)
         return
     _pending_topup_checks.add(order_id)
 
-    try:
-        await q.answer("Memeriksa status...")
+    # ✅ Notif muncul di atas INSTAN — sebelum hit API apapun
+    await q.answer("🔍 Memeriksa pembayaran...")
 
+    try:
         topup = await adb.get_topup(order_id)
         if not topup:
-            try:
-                await q.message.delete()
-            except Exception:
-                pass
-            await ctx.bot.send_message(
-                chat_id=q.from_user.id,
-                text="Data transaksi top up tidak ditemukan.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
-                ]])
-            )
+            await q.answer("❌ Data transaksi tidak ditemukan.", show_alert=True)
             return
 
         status = topup["status"]
 
         if status == "pending":
+            # Edit pesan QR jadi "sedang mengecek" dulu (feedback langsung ke user)
+            try:
+                await q.edit_message_caption(
+                    caption=(
+                        f"🔍 <b>Mengecek status pembayaran...</b>\n\n"
+                        f"<blockquote>• Order ID : <code>{order_id}</code></blockquote>\n"
+                        f"Mohon tunggu sebentar."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+
             txn = await _cek_status_pakasir_async(order_id, topup["jumlah"])
             if txn and txn.get("status") == "completed":
                 was_updated = await adb.complete_topup_if_pending(order_id)
                 if was_updated:
                     result = await adb.tambah_saldo(topup["user_id"], topup["jumlah"], "topup", "Top up via QRIS", ref_id=order_id)
                     status = "completed"
-                    
+
                     # Kirim ke live transaction feed
                     try:
                         from handlers.live_tx import send_live_tx, censor_name, censor_id
@@ -378,7 +383,6 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         u = await adb.get_user(topup["user_id"])
                         c_name = censor_name(u["full_name"] if u else "Pengguna")
                         c_uid = censor_id(topup["user_id"])
-                        
                         live_teks = (
                             f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> <b>TOP UP COMPLETED</b>\n\n"
                             f"<blockquote>• Order ID : <code>{order_id}</code>\n"
@@ -396,47 +400,62 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         if status == "completed":
             saldo = await adb.get_saldo(topup["user_id"])
-            
-            # Kirim pesan notifikasi sukses terlebih dahulu
-            await ctx.bot.send_message(
-                chat_id=topup["user_id"],
-                text=(
-                    f"<b>✅ TOP UP BERHASIL</b>\n\n"
-                    f"<blockquote>• Jumlah : <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
-                    f"• Saldo  : <b>{fmt_rupiah(saldo)}</b></blockquote>"
-                ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
-                ]])
-            )
+            # ✅ Edit pesan QR di tempat — tidak kirim pesan baru, tidak lompat
             try:
-                await q.message.delete()
+                await q.edit_message_caption(
+                    caption=(
+                        f"✅ <b>TOP UP BERHASIL!</b>\n\n"
+                        f"<blockquote>• Jumlah : <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
+                        f"• Saldo  : <b>{fmt_rupiah(saldo)}</b></blockquote>"
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+                    ]])
+                )
             except Exception:
                 pass
 
         elif status in ("expired", "cancelled"):
             status_teks = "Kadaluarsa" if status == "expired" else "Dibatalkan"
-            
-            # Kirim pesan status gagal terlebih dahulu
-            await ctx.bot.send_message(
-                chat_id=topup["user_id"],
-                text=(
-                    f"<b>❌ PEMBAYARAN {status_teks.upper()}</b>\n\n"
-                    f"<blockquote>QR Code sudah tidak berlaku. Silakan ajukan top up baru.</blockquote>"
-                ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
-                ]])
-            )
+            # ✅ Edit pesan QR di tempat
             try:
-                await q.message.delete()
+                await q.edit_message_caption(
+                    caption=(
+                        f"❌ <b>PEMBAYARAN {status_teks.upper()}</b>\n\n"
+                        f"<blockquote>QR Code sudah tidak berlaku.\nSilakan ajukan top up baru.</blockquote>"
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
+                        InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
+                    ]])
+                )
             except Exception:
                 pass
         else:
-            await q.answer("Pembayaran belum diterima. Silakan selesaikan pembayaran QRIS Anda.", show_alert=True)
+            # Masih pending — kembalikan tampilan QR asli
+            topup_data = await adb.get_topup(order_id)
+            if topup_data:
+                teks_qr = (
+                    f"<tg-emoji emoji-id=\"5364075889669718872\">💵</tg-emoji> <b>INVOICE TOP UP</b>\n\n"
+                    f"<blockquote>• Order ID : <code>{order_id}</code>\n"
+                    f"• Nominal  : <b>{fmt_rupiah(topup_data['jumlah'])}</b></blockquote>\n"
+                    f"Scan QRIS di atas untuk membayar.\n"
+                    f"Saldo masuk otomatis setelah terverifikasi."
+                )
+                try:
+                    await q.edit_message_caption(
+                        caption=teks_qr,
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary"),
+                            InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")
+                        ]])
+                    )
+                except Exception:
+                    pass
+            await q.answer("⏳ Pembayaran belum diterima. Selesaikan pembayaran QRIS Anda.", show_alert=True)
     finally:
         _pending_topup_checks.discard(order_id)
 
@@ -445,30 +464,31 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     order_id = q.data.split(":", 1)[1]
 
-    # Anti-Spam Check
+    # Anti-Spam: jawab DULU agar notif muncul instan
     if order_id in _pending_batal:
-        await q.answer("Proses pembatalan sedang berjalan...", show_alert=True)
+        await q.answer("⏳ Proses pembatalan sedang berjalan...", show_alert=False)
         return
     _pending_batal.add(order_id)
 
+    # ✅ Notif muncul di atas INSTAN
+    await q.answer("❌ Membatalkan...")
+
     try:
-        await q.answer("Membatalkan...")
         await adb.update_topup_status(order_id, "cancelled")
-        
-        # Kirim pesan konfirmasi batal terlebih dahulu
-        await ctx.bot.send_message(
-            chat_id=q.from_user.id,
-            text=(
-                f"<b>❌ TOP UP DIBATALKAN</b>\n\n"
-                f"<blockquote>Transaksi top up Anda berhasil dibatalkan.</blockquote>"
-            ),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
-            ]])
-        )
+
+        # ✅ Edit pesan QR di tempat — tidak kirim pesan baru, tidak lompat
         try:
-            await q.message.delete()
+            await q.edit_message_caption(
+                caption=(
+                    f"❌ <b>TOP UP DIBATALKAN</b>\n\n"
+                    f"<blockquote>Transaksi top up Anda berhasil dibatalkan.</blockquote>"
+                ),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+                ]])
+            )
         except Exception:
             pass
     finally:
