@@ -325,18 +325,6 @@ def main():
         )
 
         async def post_init_with_scheduler(application: Application):
-            try:
-                import asyncio
-                from concurrent.futures import ThreadPoolExecutor
-                import atexit
-                loop = asyncio.get_running_loop()
-                executor = ThreadPoolExecutor(max_workers=64, thread_name_prefix="asyncio-worker-gmail")
-                loop.set_default_executor(executor)
-                atexit.register(executor.shutdown, wait=False)
-                logger.info("✅ Event loop default executor configured with 64 threads")
-            except Exception as e:
-                logger.error("Failed to set default executor: %s", e)
-
             await post_init(application)
             scheduler.start()
             logger.info("⏰ Scheduler dimulai")
