@@ -263,12 +263,12 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         expired_at     = order_data.get("expired_at", "~15 menit")
 
         try:
-            dt = datetime.fromisoformat(expired_at.replace("Z", "+00:00"))
-            from datetime import timedelta
-            dt_wib = dt + timedelta(hours=7)
-            readable_exp = dt_wib.strftime("%d/%m/%Y %H:%M") + " WIB"
+            from datetime import timezone, timedelta
+            jakarta_tz = timezone(timedelta(hours=7))
+            exp_dt_jakarta = datetime.now(jakarta_tz) + timedelta(minutes=5)
+            readable_exp = exp_dt_jakarta.strftime("%d/%m/%Y %H:%M") + " WIB (5 Menit)"
         except Exception:
-            readable_exp = expired_at[:16].replace("T", " ") + " WIB"
+            readable_exp = "5 Menit"
 
         qr_img = generate_qr_bytes(payment_number)
 

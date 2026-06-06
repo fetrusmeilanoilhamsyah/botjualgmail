@@ -387,14 +387,14 @@ def get_topup(order_id: str) -> dict | None:
 
 def complete_topup_if_pending(order_id: str, completed_at: str = None) -> bool:
     """
-    ATOMIC: tandai topup selesai HANYA jika masih 'pending'.
+    ATOMIC: tandai topup selesai HANYA jika masih 'pending' atau 'expired'.
     Return True jika berhasil update (pertama kali), False jika sudah diproses.
     """
     completed_at = completed_at or datetime.now().isoformat()
     with get_connection() as conn:
         result = conn.execute("""
             UPDATE topup SET status='completed', completed_at=?
-            WHERE order_id=? AND status='pending'
+            WHERE order_id=? AND status IN ('pending', 'expired')
         """, (completed_at, order_id))
         conn.commit()
         return result.rowcount > 0
