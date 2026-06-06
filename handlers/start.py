@@ -324,13 +324,13 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ref_stats = await adb.get_referral_stats(user.id)
     saldo     = fmt_rupiah(u["saldo"])
     teks = (
-        f"<tg-emoji emoji-id=\"6158694317452956321\">😀</tg-emoji> <b>Info Akun</b>\n\n"
-        f"ID: <code>{user.id}</code>\n"
-        f"Nama: {user.full_name or '-'}\n"
-        f"Username: @{user.username or '-'}\n\n"
-        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo: <b>{saldo}</b>\n"
-        f"Total Referral: {ref_stats['referral_count']} orang\n"
-        f"Bergabung: {u['joined_at'][:10]}\n"
+        f"<tg-emoji emoji-id=\"5452069934089641166\">👤</tg-emoji> <b>INFO AKUN</b>\n\n"
+        f"<blockquote>• ID User   : <code>{user.id}</code>\n"
+        f"• Nama      : <b>{user.full_name or '-'}</b>\n"
+        f"• Username  : @{user.username or '-'}\n"
+        f"• Saldo     : <b>{saldo}</b>\n"
+        f"• Total Ref : <b>{ref_stats['referral_count']} Orang</b>\n"
+        f"• Joined    : <b>{u['joined_at'][:10]}</b></blockquote>"
     )
 
     kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
