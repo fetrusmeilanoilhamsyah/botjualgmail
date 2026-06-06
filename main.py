@@ -65,7 +65,6 @@ def main():
 
     from config import BOT_TOKEN, ADMIN_IDS, WEBHOOK_PORT, HEALTH_PORT, USE_LOCAL_BOT_API, LOCAL_BOT_API_PORT
     from database.db import init_db
-    from webhook_pakasir import start_webhook_server_thread
 
     if not BOT_TOKEN:
         logger.critical("BOT_TOKEN tidak diset di .env!")
