@@ -17,14 +17,23 @@ from telegram.ext import Application, ApplicationBuilder, Defaults
 
 # ── Patch CallbackQuery.answer to prevent duplicate network calls ──
 import telegram
+import time
+from collections import OrderedDict
+
 original_answer = telegram.CallbackQuery.answer
-_answered_queries = set()
+_answered_queries = OrderedDict()  # id -> timestamp
+
 async def patched_answer(self, *args, **kwargs):
+    now = time.monotonic()
     if self.id in _answered_queries:
         return
-    _answered_queries.add(self.id)
-    if len(_answered_queries) > 5000:
-        _answered_queries.clear()
+    _answered_queries[self.id] = now
+    
+    # Hapus entri > 60 detik (query Telegram expire 30 detik)
+    cutoff = now - 60
+    while _answered_queries and next(iter(_answered_queries.values())) < cutoff:
+        _answered_queries.popitem(last=False)
+        
     try:
         return await original_answer(self, *args, **kwargs)
     except Exception as e:
