@@ -3,7 +3,7 @@ handlers/topup.py - Top Up Saldo via QRIS Pakasir
 """
 import logging
 import uuid
-import requests
+import aiohttp
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
@@ -43,7 +43,7 @@ def fmt_short_rupiah(n: int) -> str:
     return str(n)
 
 
-def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None:
+async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) -> dict | None:
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
     url = "https://app.pakasir.com/api/transactioncreate/qris"
@@ -54,24 +54,19 @@ def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None
         "amount":   amount,
     }
     try:
-        resp = requests.post(url, json=payload, timeout=10)
-        data = resp.json()
-        if resp.status_code == 200 and data.get("payment"):
-            return data["payment"]
-        logger.error("[topup] Pakasir error: %s", data)
-        return None
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                data = await r.json()
+                if r.status == 200 and data.get("payment"):
+                    return data["payment"]
+                logger.error("[topup] Pakasir error: %s", data)
+                return None
     except Exception as e:
         logger.error("[topup] Pakasir request gagal: %s", e)
         return None
 
 
-async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) -> dict | None:
-    import asyncio
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _buat_order_pakasir, order_id, amount, user_id)
-
-
-def _cek_status_pakasir(order_id: str, amount: int) -> dict | None:
+async def _cek_status_pakasir_async(order_id: str, amount: int) -> dict | None:
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
     url = "https://app.pakasir.com/api/transactiondetail"
@@ -82,20 +77,15 @@ def _cek_status_pakasir(order_id: str, amount: int) -> dict | None:
         "amount":   amount,
     }
     try:
-        resp = requests.get(url, params=params, timeout=10)
-        data = resp.json()
-        if resp.status_code == 200 and data.get("transaction"):
-            return data["transaction"]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                data = await r.json()
+                if r.status == 200 and data.get("transaction"):
+                    return data["transaction"]
         return None
     except Exception as e:
         logger.error("[topup] Pakasir status check gagal: %s", e)
         return None
-
-
-async def _cek_status_pakasir_async(order_id: str, amount: int) -> dict | None:
-    import asyncio
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _cek_status_pakasir, order_id, amount)
 
 
 async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
