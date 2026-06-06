@@ -27,15 +27,13 @@ async def cmd_broadcast_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pass
 
     teks = (
-        "<b>📢 BROADCAST PESAN BARU</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>📢 BROADCAST PESAN BARU</b>\n\n"
         "Tulis pesan yang ingin disiarkan ke semua pengguna.\n"
-        "Format HTML didukung:\n"
+        "<blockquote>Format HTML didukung:\n"
         "• <b>Teks Tebal</b>\n"
         "• <i>Teks Miring</i>\n"
         "• <code>Monospace (Kode)</code>\n"
-        "• <a href=\"https://t.me/\">Link</a>\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
+        "• <a href=\"https://t.me/\">Link</a></blockquote>\n"
         "Silakan ketik dan kirim pesan Anda sekarang..."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
@@ -64,13 +62,10 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     total_user = await adb.get_total_users()
     preview = (
-        f"<b>🚨 PREVIEW SIARAN PESAN</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"<b>Isi Pesan:</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"{pesan}\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎯 Target: {total_user:,} pengguna\n\n"
+        f"<b>🚨 PREVIEW SIARAN PESAN</b>\n\n"
+        f"<blockquote>• Target    : <b>{total_user:,} Pengguna</b>\n"
+        f"• Isi Pesan : </blockquote>\n"
+        f"<blockquote>{pesan}</blockquote>\n"
         f"Kirim siaran pesan ini sekarang?"
     )
     kb = [
@@ -116,9 +111,8 @@ async def admin_broadcast_reedit(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     db.set_session(user.id, "admin_broadcast_preview", {"menu_msg_id": q.message.message_id})
     await q.edit_message_text(
-        "<b>✏️ EDIT PESAN BROADCAST</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        "Silakan ketik ulang pesan broadcast Anda...",
+        "<b>✏️ EDIT PESAN BROADCAST</b>\n\n"
+        "<blockquote>Silakan ketik ulang pesan broadcast Anda...</blockquote>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]])
     )
@@ -149,10 +143,8 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     gagal     = 0
 
     await q.edit_message_text(
-        f"<b>⏳ PROSES PENGIRIMAN...</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Siaran sedang dikirim ke {total:,} user.\n"
-        f"Harap tunggu hingga selesai..."
+        f"<b>⏳ PROSES PENGIRIMAN...</b>\n\n"
+        f"<blockquote>Siaran sedang dikirim ke {total:,} user. Harap tunggu hingga selesai...</blockquote>"
     )
 
     for uid in user_ids:
@@ -167,12 +159,10 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     await adb.log_broadcast(user.id, pesan, sukses, gagal)
 
     teks_selesai = (
-        f"<b>📢 SIARAN SELESAI</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Sukses : {sukses:,} user\n"
-        f"• Gagal  : {gagal:,} user\n"
-        f"• Total  : {total:,} user\n\n"
-        f"━━━━━━━━━━━━━━━━━━"
+        f"<b>📢 SIARAN SELESAI</b>\n\n"
+        f"<blockquote>• Sukses : <b>{sukses:,} User</b>\n"
+        f"• Gagal  : <b>{gagal:,} User</b>\n"
+        f"• Total  : <b>{total:,} User</b></blockquote>"
     )
     kb = [[
         InlineKeyboardButton(

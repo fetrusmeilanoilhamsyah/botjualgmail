@@ -42,20 +42,18 @@ async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     now = datetime.now().strftime("%d %b %Y %H:%M")
 
     teks = (
-        f"<b>📊 STATISTIK SISTEM</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"👥 <b>Total User      :</b> {s['total_user']:,}\n"
-        f"📦 <b>Stok Global     :</b> {s['stok_tersedia']:,} Pcs\n\n"
-        f"💳 <b>FINANSIAL</b>\n"
-        f"• Saldo Beredar   : {fmt_rupiah(s['total_saldo'])}\n"
-        f"• Topup Hari Ini  : {fmt_rupiah(s['topup_hari_ini'])}\n"
-        f"• Omset Hari Ini  : {fmt_rupiah(s['omset_hari_ini'])}\n"
-        f"• Total Omset     : {fmt_rupiah(s['omset_total'])}\n\n"
-        f"🛒 <b>TRANSAKSI & GARANSI</b>\n"
-        f"• Trx Hari Ini    : {s['trx_hari_ini']:,}\n"
-        f"• Total Trx       : {s['total_trx']:,}\n"
-        f"• Klaim Pending   : {s['garansi_pending']:,}\n\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
+        f"<b>📊 STATISTIK SISTEM</b>\n\n"
+        f"<blockquote>• Total User  : <b>{s['total_user']:,}</b>\n"
+        f"• Stok Global : <b>{s['stok_tersedia']:,} Pcs</b></blockquote>\n"
+        f"<b>💳 FINANSIAL</b>\n"
+        f"<blockquote>• Saldo Ber   : <b>{fmt_rupiah(s['total_saldo'])}</b>\n"
+        f"• Topup Hari  : <b>{fmt_rupiah(s['topup_hari_ini'])}</b>\n"
+        f"• Omset Hari  : <b>{fmt_rupiah(s['omset_hari_ini'])}</b>\n"
+        f"• Total Omset : <b>{fmt_rupiah(s['omset_total'])}</b></blockquote>\n"
+        f"<b>🛒 TRANSAKSI & GARANSI</b>\n"
+        f"<blockquote>• Trx Hari    : <b>{s['trx_hari_ini']:,}</b>\n"
+        f"• Total Trx   : <b>{s['total_trx']:,}</b>\n"
+        f"• Klaim Pend  : <b>{s['garansi_pending']:,}</b></blockquote>\n"
         f"<i>🕒 Update: {now}</i>"
     )
 

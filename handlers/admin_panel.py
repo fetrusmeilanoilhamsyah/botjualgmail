@@ -28,12 +28,10 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s = await adb.get_admin_stats()
 
     teks = (
-        f"<b>⚙️ CONTROL PANEL ADMIN</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"<tg-emoji emoji-id=\"6158694317452956321\">👥</tg-emoji> <b>Total User      :</b> {s['total_user']:,}\n"
-        f"<tg-emoji emoji-id=\"6003502340001238882\">📈</tg-emoji> <b>Trx Hari Ini    :</b> {s['trx_hari_ini']}\n"
-        f"<tg-emoji emoji-id=\"6159113038109611127\">🚨</tg-emoji> <b>Garansi Pending :</b> {s['garansi_pending']}\n\n"
-        f"━━━━━━━━━━━━━━━━━━"
+        f"<b>⚙️ CONTROL PANEL ADMIN</b>\n\n"
+        f"<blockquote>• Total User  : <b>{s['total_user']:,}</b>\n"
+        f"• Trx Hari Ini: <b>{s['trx_hari_ini']}</b>\n"
+        f"• Garansi Pend: <b>{s['garansi_pending']}</b></blockquote>"
     )
 
     kb = [

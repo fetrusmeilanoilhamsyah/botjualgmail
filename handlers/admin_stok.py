@@ -48,11 +48,10 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     harga_satuan = await adb.get_harga_satuan()
 
     teks = (
-        "<b>📦 KELOLA STOK GMAIL</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Total Tersedia : <b>{total_tersedia:,} Pcs</b>\n"
+        "<b>📦 KELOLA STOK GMAIL</b>\n\n"
+        f"<blockquote>• Total Tersedia : <b>{total_tersedia:,} Pcs</b>\n"
         f"• Total Terjual  : <b>{total_terjual:,} Pcs</b>\n"
-        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
+        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b></blockquote>"
     )
 
     kb = [
@@ -78,11 +77,10 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     harga_satuan = await adb.get_harga_satuan()
 
     teks = (
-        "<b>📦 KELOLA STOK GMAIL</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Total Tersedia : <b>{total_tersedia:,} Pcs</b>\n"
+        "<b>📦 KELOLA STOK GMAIL</b>\n\n"
+        f"<blockquote>• Total Tersedia : <b>{total_tersedia:,} Pcs</b>\n"
         f"• Total Terjual  : <b>{total_terjual:,} Pcs</b>\n"
-        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
+        f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b></blockquote>"
     )
     kb = [
         [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
@@ -98,8 +96,7 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         from datetime import datetime
         now_str = datetime.now().strftime("%H:%M:%S")
         teks_update = (
-            f"{teks}"
-            f"━━━━━━━━━━━━━━━━━━\n"
+            f"{teks}\n"
             f"<i>🕒 Update: {now_str}</i>"
         )
         from handlers.start import kirim_atau_edit_menu
@@ -118,14 +115,12 @@ async def admin_upload_stok_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     db.set_session(update.effective_user.id, "admin_waiting_stok_file", {"paket_id": 1, "menu_msg_id": q.message.message_id})
 
     teks = (
-        "<b>📤 UPLOAD FILE STOK</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>📤 UPLOAD FILE STOK</b>\n\n"
         "Kirim file <code>.txt</code> dengan format (satu akun per baris):\n"
-        "<code>email|password|recovery|tgl_buat|catatan</code>\n\n"
+        "<blockquote><code>email|password|recovery|tgl_buat|catatan</code></blockquote>\n"
         "<b>Contoh:</b>\n"
-        "<code>budi@gmail.com|pass123|rec@gmail.com|2026-06-06|fresh</code>\n\n"
+        "<blockquote><code>budi@gmail.com|pass123|rec@gmail.com|2026-06-06|fresh</code></blockquote>\n"
         "• Minimal field: <code>email|password</code>\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
         "Silakan kirimkan file .txt Anda sekarang..."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
@@ -187,12 +182,10 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     ok, dup = await adb.bulk_add_stok(paket_id, lines)
 
     teks_res = (
-        f"<b>✅ UPLOAD STOK BERHASIL</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Berhasil   : {ok:,} akun\n"
-        f"• Duplikat   : {dup:,} akun (di-skip)\n"
-        f"• Total Baris: {len(lines):,} baris\n\n"
-        f"━━━━━━━━━━━━━━━━━━"
+        f"<b>✅ UPLOAD STOK BERHASIL</b>\n\n"
+        f"<blockquote>• Berhasil    : <b>{ok:,} Akun</b>\n"
+        f"• Duplikat    : <b>{dup:,} Akun</b> (di-skip)\n"
+        f"• Total Baris : <b>{len(lines):,} Baris</b></blockquote>"
     )
     kb = [[
         InlineKeyboardButton("Lihat Stok", callback_data="admin_stok_refresh", style="primary"),
@@ -210,14 +203,12 @@ async def admin_input_manual_start(update: Update, ctx: ContextTypes.DEFAULT_TYP
 
     db.set_session(update.effective_user.id, "admin_input_manual_akun", {"paket_id": 1, "menu_msg_id": q.message.message_id})
     teks = (
-        "<b>✍️ INPUT MANUAL AKUN</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>✍️ INPUT MANUAL AKUN</b>\n\n"
         "Ketik detail akun dengan format:\n"
-        "<code>email|password|recovery|tgl_buat|catatan</code>\n\n"
+        "<blockquote><code>email|password|recovery|tgl_buat|catatan</code></blockquote>\n"
         "<b>Contoh:</b>\n"
-        "<code>budi@gmail.com|pass123|rec@gmail.com|2026-06-06|fresh</code>\n\n"
+        "<blockquote><code>budi@gmail.com|pass123|rec@gmail.com|2026-06-06|fresh</code></blockquote>\n"
         "• Minimal field: <code>email|password</code>\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
         "Silakan ketik detail akun sekarang..."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
@@ -285,11 +276,9 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
     if success:
         stok_now = await adb.get_stok_count()
         teks_res = (
-            f"<b>✅ AKUN BERHASIL DITAMBAHKAN</b>\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"• Email      : <code>{email}</code>\n"
-            f"• Total Stok : {stok_now:,} akun\n\n"
-            f"━━━━━━━━━━━━━━━━━━"
+            f"<b>✅ AKUN BERHASIL DITAMBAHKAN</b>\n\n"
+            f"<blockquote>• Email      : <code>{email}</code>\n"
+            f"• Total Stok : <b>{stok_now:,} Akun</b></blockquote>"
         )
         kb = [[
             InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="primary"),
@@ -306,9 +295,8 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
         await ctx.bot.send_message(chat_id=user.id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
     else:
         teks_res = (
-            f"<b>⚠️ AKUN DUPLIKAT</b>\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"Email <code>{email}</code> sudah terdaftar di database."
+            f"<b>⚠️ AKUN DUPLIKAT</b>\n\n"
+            f"<blockquote>Email <code>{email}</code> sudah terdaftar di database.</blockquote>"
         )
         kb = [[InlineKeyboardButton("Kembali", callback_data="admin_stok_refresh", style="danger")]]
         if menu_msg_id:
@@ -331,16 +319,17 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     harga_satuan = await adb.get_harga_satuan()
     paket_list = await adb.get_all_paket()
     teks = (
-        f"<b>🏷️ KELOLA PAKET & HARGA</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"💰 Harga Satuan: <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n\n"
+        f"<b>🏷️ KELOLA PAKET & HARGA</b>\n\n"
+        f"<blockquote>• Harga Satuan : <b>{fmt_rupiah(harga_satuan)} / Gmail</b></blockquote>\n"
         f"<b>Daftar Paket:</b>\n"
     )
 
     for p in paket_list:
         status = "🟢" if p["aktif"] else "🔴"
-        teks += f"• {status} <b>#{p['id']} {p['nama']}</b>\n"
-        teks += f"  Harga: {fmt_short_rupiah(p['harga'])}\n\n"
+        teks += (
+            f"<b>#{p['id']} {p['nama']}</b> ({status})\n"
+            f"<blockquote>• Harga      : <b>{fmt_rupiah(p['harga'])}</b></blockquote>\n\n"
+        )
 
     kb = [
         [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="primary")],
@@ -362,11 +351,9 @@ async def admin_edit_harga_satuan_start(update: Update, ctx: ContextTypes.DEFAUL
     from handlers.start import kirim_atau_edit_menu
     await kirim_atau_edit_menu(
         update, ctx,
-        f"<b>💰 EDIT HARGA SATUAN</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Harga saat ini: {fmt_rupiah(await adb.get_harga_satuan())}\n\n"
-        f"Silakan ketik harga baru per 1 Gmail\n"
-        f"(hanya angka saja, contoh: <code>4500</code>):",
+        f"<b>💰 EDIT HARGA SATUAN</b>\n\n"
+        f"<blockquote>• Harga Saat Ini : <b>{fmt_rupiah(await adb.get_harga_satuan())}</b></blockquote>\n"
+        f"Ketik harga baru per 1 Gmail (hanya angka, contoh: <code>4500</code>):",
         InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_paket", style="danger")]])
     )
 
@@ -407,11 +394,9 @@ async def admin_terima_harga_satuan_baru(update: Update, ctx: ContextTypes.DEFAU
 
     await adb.update_harga_satuan(harga)
     teks_res = (
-        f"<b>✅ HARGA SELESAI DIPERBARUI</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"• Harga Baru: <b>{fmt_rupiah(harga)} / Gmail</b>\n"
-        f"• Paket-paket lain disesuaikan otomatis.\n\n"
-        f"━━━━━━━━━━━━━━━━━━"
+        f"<b>✅ HARGA SELESAI DIPERBARUI</b>\n\n"
+        f"<blockquote>• Harga Baru   : <b>{fmt_rupiah(harga)} / Gmail</b>\n"
+        f"• Penyesuaian  : <b>Paket otomatis diperbarui</b></blockquote>"
     )
     kb = [[InlineKeyboardButton("Kembali", callback_data="admin_paket", style="danger")]]
     if menu_msg_id:
@@ -431,8 +416,7 @@ async def admin_toggle_paket_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     paket_list = await adb.get_all_paket()
     teks = (
-        f"<b>⚙️ STATUS AKTIF PAKET</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>⚙️ STATUS AKTIF PAKET</b>\n\n"
         f"Silakan pilih paket di bawah untuk mengaktifkan atau menonaktifkannya:"
     )
     kb = []

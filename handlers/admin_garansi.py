@@ -40,22 +40,20 @@ async def _show_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if not pending:
         teks = (
-            f"<b>🚨 KLAIM GARANSI PENDING</b>\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"Tidak ada klaim garansi aktif."
+            f"<b>🚨 KLAIM GARANSI PENDING</b>\n\n"
+            f"<blockquote>Tidak ada klaim garansi aktif saat ini.</blockquote>"
         )
         kb   = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")]]
     else:
-        teks  = f"<b>🚨 KLAIM GARANSI PENDING ({len(pending)})</b>\n━━━━━━━━━━━━━━━━━━\n\n"
+        teks  = f"<b>🚨 KLAIM GARANSI PENDING ({len(pending)})</b>\n\n"
         kb    = []
         for g in pending:
             teks += (
-                f"<b>ID Klaim :</b> #{g['id']}\n"
-                f"• User     : {g['full_name']} (@{g['username'] or '-'})\n"
+                f"<b>ID Klaim #{g['id']}</b>\n"
+                f"<blockquote>• User     : {g['full_name']} (@{g['username'] or '-'})\n"
                 f"• Paket    : {g['paket_nama']} (Trx #{g['pembelian_id']})\n"
                 f"• Alasan   : <i>{g['alasan'][:60]}</i>\n"
-                f"• Tanggal  : {g['created_at'][:16]}\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
+                f"• Tanggal  : {g['created_at'][:16]}</blockquote>\n\n"
             )
             kb.append([InlineKeyboardButton(
                 f"Proses Klaim #{g['id']}",
@@ -101,10 +99,9 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     paket_list = await adb.get_all_paket()
     teks = (
-        f"<b>✅ PERSETUJUAN KLAIM #{garansi_id}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"• User     : {garansi['full_name']} (@{garansi['username'] or '-'})\n"
-        f"• Paket    : {garansi['paket_nama']}\n\n"
+        f"<b>✅ PERSETUJUAN KLAIM #{garansi_id}</b>\n\n"
+        f"<blockquote>• User     : {garansi['full_name']} (@{garansi['username'] or '-'})\n"
+        f"• Paket    : {garansi['paket_nama']}</blockquote>\n"
         f"Silakan pilih paket pengganti di bawah:"
     )
     kb = [[InlineKeyboardButton(
@@ -168,13 +165,9 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    f"<b>✅ GARANSI DISETUJUI</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n\n"
-                    f"Klaim garansi Anda telah disetujui.\n"
-                    f"Berikut adalah akun pengganti:\n\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"{akun_teks}\n"
-                    f"━━━━━━━━━━━━━━━━━━"
+                    f"<b>✅ GARANSI DISETUJUI</b>\n\n"
+                    f"<blockquote>Klaim garansi Anda telah disetujui. Berikut adalah akun pengganti Anda:</blockquote>\n"
+                    f"{akun_teks}"
                 ),
                 parse_mode="HTML"
             )
@@ -184,9 +177,8 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     from handlers.start import kirim_atau_edit_menu
     await kirim_atau_edit_menu(
         update, ctx,
-        f"<b>✅ KLAIM #{garansi_id} SELESAI</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Akun pengganti telah berhasil dikirim ke pengguna.",
+        f"<b>✅ KLAIM #{garansi_id} SELESAI</b>\n\n"
+        f"<blockquote>Akun pengganti telah berhasil dikirim ke pengguna.</blockquote>",
         InlineKeyboardMarkup([[
             InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="primary"),
             InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger"),
@@ -204,9 +196,8 @@ async def cb_tolak_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     from handlers.start import kirim_atau_edit_menu
     await kirim_atau_edit_menu(
         update, ctx,
-        f"<b>❌ TOLAK KLAIM #{garansi_id}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Silakan ketik alasan penolakan (pesan ini akan dikirim langsung ke pengguna):",
+        f"<b>❌ TOLAK KLAIM #{garansi_id}</b>\n\n"
+        f"Silakan ketik alasan penolakan (alasan ini akan langsung dikirim ke pengguna):",
         InlineKeyboardMarkup([[
             InlineKeyboardButton("Batal", callback_data="admin_garansi_list", style="danger")
         ]])
@@ -241,10 +232,9 @@ async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TY
             await ctx.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    f"<b>❌ KLAIM GARANSI #{garansi_id} DITOLAK</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n\n"
-                    f"<b>Alasan:</b> {alasan}\n\n"
-                    f"Hubungi admin jika Anda membutuhkan bantuan lebih lanjut."
+                    f"<b>❌ KLAIM GARANSI #{garansi_id} DITOLAK</b>\n\n"
+                    f"<blockquote>• Alasan : <b>{alasan}</b></blockquote>\n"
+                    f"Hubungi admin jika ada kendala."
                 ),
                 parse_mode="HTML"
             )
@@ -252,10 +242,8 @@ async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TY
             pass
 
     teks_hasil = (
-        f"<b>❌ KLAIM #{garansi_id} DITOLAK</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Pengajuan klaim berhasil ditolak.\n"
-        f"Notifikasi alasan telah dikirim ke pengguna."
+        f"<b>❌ KLAIM #{garansi_id} DITOLAK</b>\n\n"
+        f"<blockquote>Klaim berhasil ditolak. Notifikasi alasan telah dikirim ke pengguna.</blockquote>"
     )
     kb = [[InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="danger")]]
     
