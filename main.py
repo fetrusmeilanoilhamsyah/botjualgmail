@@ -318,14 +318,19 @@ def main():
         except Exception as e:
             logger.error("Failed to load banner cache on startup: %s", e)
 
-        # Start webhook Pakasir
-        loop = asyncio.get_event_loop()
-        start_webhook_server_thread(
-            port=WEBHOOK_PORT,
-            bot=application.bot,
-            main_loop=loop
-        )
-        logger.info("🔗 Webhook Pakasir aktif di port %d", WEBHOOK_PORT)
+        # Start webhook Pakasir on main event loop
+        try:
+            from webhook_pakasir import create_webhook_app
+            from aiohttp import web
+            loop = asyncio.get_running_loop()
+            app = create_webhook_app(application.bot, loop)
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "0.0.0.0", WEBHOOK_PORT)
+            await site.start()
+            logger.info("🔗 Webhook Pakasir aktif di port %d (main event loop)", WEBHOOK_PORT)
+        except Exception as e:
+            logger.error("Failed to start Webhook server on main event loop: %s", e)
 
 
     app.post_init = post_init

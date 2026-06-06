@@ -100,12 +100,10 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
             logger.warning("[Webhook-gmail] Order ID tidak dikenal: %s", order_id)
             return web.Response(status=200, text="OK")
 
-        from database import db
-
-        loop = asyncio.get_running_loop()
+        from database.db_async import adb
 
         # Ambil data topup
-        topup = await loop.run_in_executor(None, db.get_topup, order_id)
+        topup = await adb.get_topup(order_id)
         if not topup:
             logger.warning("[Webhook-gmail] Topup tidak ditemukan: %s", order_id)
             return web.Response(status=200, text="Order not found")
@@ -130,13 +128,9 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
 
         if status == "completed":
             # ATOMIC: hanya update jika masih pending
-            was_updated = await loop.run_in_executor(
-                None,
-                partial(
-                    db.complete_topup_if_pending,
-                    order_id=order_id,
-                    completed_at=completed_at or datetime.now().isoformat()
-                )
+            was_updated = await adb.complete_topup_if_pending(
+                order_id=order_id,
+                completed_at=completed_at or datetime.now().isoformat()
             )
 
             if not was_updated:
@@ -144,16 +138,12 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 return web.Response(status=200, text="Already processed")
 
             # Tambah saldo user
-            result = await loop.run_in_executor(
-                None,
-                partial(
-                    db.tambah_saldo,
-                    user_id=topup["user_id"],
-                    jumlah=topup["jumlah"],
-                    tipe="topup",
-                    keterangan=f"Top up via QRIS",
-                    ref_id=order_id
-                )
+            result = await adb.tambah_saldo(
+                user_id=topup["user_id"],
+                jumlah=topup["jumlah"],
+                tipe="topup",
+                keterangan="Top up via QRIS",
+                ref_id=order_id
             )
 
             logger.info(
@@ -162,8 +152,7 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
             )
 
             # Hapus QR lama & notif user
-            bot       = request.app.get("bot")
-            main_loop = request.app.get("main_loop")
+            bot = request.app.get("bot")
 
             if bot:
                 # Hapus pesan QR
@@ -171,11 +160,7 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 qr_message_id = topup.get("qr_message_id")
                 if qr_chat_id and qr_message_id:
                     try:
-                        if main_loop and main_loop.is_running():
-                            asyncio.run_coroutine_threadsafe(
-                                bot.delete_message(chat_id=qr_chat_id, message_id=qr_message_id),
-                                main_loop
-                            )
+                        asyncio.create_task(bot.delete_message(chat_id=qr_chat_id, message_id=qr_message_id))
                     except Exception as e:
                         logger.debug("[Webhook-gmail] Gagal hapus QR: %s", e)
 
@@ -197,16 +182,12 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 )
 
                 try:
-                    if main_loop and main_loop.is_running():
-                        asyncio.run_coroutine_threadsafe(
-                            bot.send_message(
-                                chat_id=topup["user_id"],
-                                text=notif_text,
-                                parse_mode="HTML",
-                                reply_markup=kb
-                            ),
-                            main_loop
-                        )
+                    asyncio.create_task(bot.send_message(
+                        chat_id=topup["user_id"],
+                        text=notif_text,
+                        parse_mode="HTML",
+                        reply_markup=kb
+                    ))
                 except Exception as e:
                     logger.warning("[Webhook-gmail] Gagal notif user: %s", e)
 
@@ -214,7 +195,7 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 try:
                     from config import CHANNEL_LIVE_TX, BOT_USERNAME
                     from handlers.live_tx import censor_name, censor_id
-                    user_row = await loop.run_in_executor(None, db.get_user, topup["user_id"])
+                    user_row = await adb.get_user(topup["user_id"])
                     c_name = censor_name(user_row["full_name"] if user_row else "Pengguna")
                     c_uid = censor_id(topup["user_id"])
                     
@@ -244,21 +225,17 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                         f"➡️ Top Up Saldo @{BOT_USERNAME}"
                     )
                     if bot and CHANNEL_LIVE_TX:
-                        if main_loop and main_loop.is_running():
-                            asyncio.run_coroutine_threadsafe(
-                                bot.send_message(
-                                    chat_id=CHANNEL_LIVE_TX,
-                                    text=live_teks,
-                                    parse_mode="HTML"
-                                ),
-                                main_loop
-                            )
+                        asyncio.create_task(bot.send_message(
+                            chat_id=CHANNEL_LIVE_TX,
+                            text=live_teks,
+                            parse_mode="HTML"
+                        ))
                 except Exception as e:
                     logger.warning("[Webhook-gmail] Gagal kirim live tx: %s", e)
 
         else:
             # expired / cancelled
-            await loop.run_in_executor(None, db.update_topup_status, order_id, status)
+            await adb.update_topup_status(order_id, status)
             logger.info("[Webhook-gmail] Status update: %s → %s", order_id, status)
 
         return web.Response(status=200, text="OK")
@@ -281,29 +258,3 @@ def create_webhook_app(bot=None, main_loop=None) -> web.Application:
     app.router.add_post("/webhook/gmail",  handle_pakasir_webhook)
     app.router.add_get("/health",          handle_health)
     return app
-
-
-def start_webhook_server_thread(port: int = 8083, bot=None, main_loop=None):
-    """Jalankan webhook di thread terpisah."""
-    import threading
-
-    def _run():
-        asyncio.run(_run_server(port, bot, main_loop))
-
-    t = threading.Thread(target=_run, daemon=True, name="webhook-gmail")
-    t.start()
-    logger.info("[Webhook-gmail] Thread dimulai di port %d", port)
-    return t
-
-
-async def _run_server(port: int, bot=None, main_loop=None):
-    app    = create_webhook_app(bot, main_loop)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info("[Webhook-gmail] Berjalan di port %d", port)
-    try:
-        await asyncio.Event().wait()
-    except asyncio.CancelledError:
-        await runner.cleanup()
