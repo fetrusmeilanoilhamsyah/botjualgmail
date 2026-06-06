@@ -61,8 +61,8 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     saldo = await adb.get_saldo(update.effective_user.id)
     teks  = (
-        f"<b>Katalog Gmail - Warung Gmail</b>\n"
-        f"Saldo Aktif: <b>{fmt_rupiah(saldo)}</b>\n\n"
+        f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>KATALOG GMAIL</b>\n\n"
+        f"<blockquote>• Saldo    : <b>{fmt_rupiah(saldo)}</b></blockquote>\n"
         f"Pilih salah satu paket akun fresh di bawah ini:"
     )
 
@@ -122,12 +122,11 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     status_saldo = "Saldo mencukupi" if cukup else f"Saldo kurang {fmt_short_rupiah(paket['harga'] - saldo)} ({fmt_rupiah(paket['harga'] - saldo)})"
 
     teks = (
-        f"<b>Konfirmasi Order - Warung Gmail</b>\n\n"
-        f"Item: <b>{paket['nama']}</b>\n"
-        f"Harga: <b>{fmt_short_rupiah(paket['harga'])}</b> ({fmt_rupiah(paket['harga'])})\n"
-        f"Masa Garansi: 24 Jam (ganti baru)\n"
-        f"Saldo Anda: {fmt_rupiah(saldo)}\n"
-        f"Status: {status_saldo}\n\n"
+        f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>KONFIRMASI ORDER</b>\n\n"
+        f"<blockquote>• Item     : <b>{paket['nama']}</b>\n"
+        f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+        f"• Saldo    : <b>{fmt_rupiah(saldo)}</b>\n"
+        f"• Status   : <b>{status_saldo}</b></blockquote>\n"
         f"Lanjutkan pembayaran menggunakan saldo?"
     )
 
@@ -152,10 +151,10 @@ async def show_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     teks = (
-        "<b>Beli Custom Quantity - Warung Gmail</b>\n\n"
-        f"Rate: <b>{fmt_short_rupiah(await adb.get_harga_satuan())}</b> per pcs\n"
-        f"Stok Ready: <b>{await adb.get_stok_count()} pcs</b>\n\n"
-        "Masukkan jumlah akun yang ingin dibeli (angka saja, min 1):"
+        f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>BELI CUSTOM</b>\n\n"
+        f"<blockquote>• Rate     : <b>{fmt_rupiah(await adb.get_harga_satuan())} / Pcs</b>\n"
+        f"• Stok     : <b>{await adb.get_stok_count():,} Pcs</b></blockquote>\n"
+        f"Ketik jumlah Gmail yang ingin Anda beli (contoh: <code>15</code>):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]]
     from handlers.start import kirim_atau_edit_menu
@@ -224,12 +223,11 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
     status_saldo = "Saldo mencukupi" if cukup else f"Saldo kurang {fmt_short_rupiah(total_harga - saldo)} ({fmt_rupiah(total_harga - saldo)})"
 
     teks = (
-        f"<b>Konfirmasi Custom Order - Warung Gmail</b>\n\n"
-        f"Kuantitas: <b>{qty} Pcs</b>\n"
-        f"Total Biaya: <b>{fmt_short_rupiah(total_harga)}</b> ({fmt_rupiah(total_harga)})\n"
-        f"Garansi: 24 Jam\n"
-        f"Saldo Anda: {fmt_rupiah(saldo)}\n"
-        f"Status: {status_saldo}\n\n"
+        f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>KONFIRMASI CUSTOM ORDER</b>\n\n"
+        f"<blockquote>• Qty      : <b>{qty} Pcs</b>\n"
+        f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+        f"• Saldo    : <b>{fmt_rupiah(saldo)}</b>\n"
+        f"• Status   : <b>{status_saldo}</b></blockquote>\n"
         f"Lanjutkan pembayaran menggunakan saldo?"
     )
 
@@ -347,28 +345,25 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         if use_file_delivery:
             teks_kirim = (
-                f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                f"Kuantitas: <b>{qty} Pcs</b>\n"
-                f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
-                f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• Qty      : <b>{qty} Pcs</b>\n"
+                f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+                f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                f"Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
             )
         else:
             akun_teks = _format_akun(akun_list)
             teks_kirim = (
-                f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                f"Kuantitas: <b>{qty} Pcs</b>\n"
-                f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
-                f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"<b>DATA AKUN GMAIL</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{akun_teks}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• Qty      : <b>{qty} Pcs</b>\n"
+                f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+                f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                f"<b>DATA AKUN GMAIL:</b>\n"
+                f"{akun_teks}\n\n"
                 f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
             )
 
@@ -551,28 +546,25 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         if use_file_delivery:
             teks_kirim = (
-                f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                f"Paket: <b>{paket['nama']}</b>\n"
-                f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
-                f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• Paket    : <b>{paket['nama']}</b>\n"
+                f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                f"Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
             )
         else:
             akun_teks = _format_akun(akun_list)
             teks_kirim = (
-                f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                f"Paket: <b>{paket['nama']}</b>\n"
-                f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
-                f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"<b>DATA AKUN GMAIL</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{akun_teks}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• Paket    : <b>{paket['nama']}</b>\n"
+                f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                f"<b>DATA AKUN GMAIL:</b>\n"
+                f"{akun_teks}\n\n"
                 f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
             )
 
@@ -770,11 +762,11 @@ async def proses_buat_qris_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         qr_img = generate_qr_bytes(payment_number)
 
         teks = (
-            f"<b>Invoice Pembelian Gmail - Warung Gmail</b>\n\n"
-            f"Item: <b>{item_name}</b>\n"
-            f"Total Bayar: <b>{fmt_rupiah(total_payment)}</b>\n"
-            f"Order ID: <code>{order_id}</code>\n"
-            f"Batas Pembayaran: {readable_exp}\n\n"
+            f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>INVOICE PEMBELIAN GMAIL</b>\n\n"
+            f"<blockquote>• Item     : <b>{item_name}</b>\n"
+            f"• Total    : <b>{fmt_rupiah(total_payment)}</b>\n"
+            f"• Order ID : <code>{order_id}</code>\n"
+            f"• Batas    : <b>{readable_exp}</b></blockquote>\n"
             "Scan QRIS di atas menggunakan e-wallet atau m-banking Anda.\n"
             "Akun Gmail akan otomatis dikirimkan ke chat ini setelah pembayaran sukses terverifikasi."
         )
@@ -811,12 +803,12 @@ async def proses_buat_qris_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         # Mode manual
         from config import ADMIN_CONTACT
         teks = (
-            f"<b>Pembelian Gmail (Manual) - Warung Gmail</b>\n\n"
-            f"Item: <b>{item_name}</b>\n"
-            f"Total Bayar: <b>{fmt_rupiah(amount)}</b>\n"
-            f"Order ID: <code>{order_id}</code>\n\n"
-            "Hubungi admin untuk melakukan verifikasi pembayaran manual Anda.\n"
-            f"Kontak Admin: {ADMIN_CONTACT}"
+            f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>PEMBELIAN GMAIL MANUAL</b>\n\n"
+            f"<blockquote>• Item     : <b>{item_name}</b>\n"
+            f"• Total    : <b>{fmt_rupiah(amount)}</b>\n"
+            f"• Order ID : <code>{order_id}</code></blockquote>\n"
+            f"Hubungi admin untuk verifikasi pembayaran.\n"
+            f"Kontak Admin: <b>{ADMIN_CONTACT}</b>"
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         
@@ -889,7 +881,10 @@ async def cek_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             status_teks = "Kadaluarsa" if status == "expired" else "Dibatalkan"
             await ctx.bot.send_message(
                 chat_id=topup["user_id"],
-                text=f"<b>Pembelian {status_teks}</b>\n\nQR Code sudah tidak berlaku. Silakan lakukan pembelian ulang.",
+                text=(
+                    f"<b>❌ PEMBELIAN {status_teks.upper()}</b>\n\n"
+                    f"<blockquote>QR Code sudah tidak berlaku. Silakan lakukan pembelian ulang.</blockquote>"
+                ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("Katalog Gmail", callback_data="beli_paket", style="primary"),
@@ -921,7 +916,10 @@ async def batal_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         await ctx.bot.send_message(
             chat_id=q.from_user.id,
-            text="<b>Pembelian Dibatalkan</b>\n\nTransaksi pembelian Anda berhasil dibatalkan.",
+            text=(
+                f"<b>❌ PEMBELIAN DIBATALKAN</b>\n\n"
+                f"<blockquote>Transaksi pembelian Anda berhasil dibatalkan.</blockquote>"
+            ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
@@ -1017,28 +1015,25 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
             use_file_delivery = (paket["kuantitas"] > 5) or (len(_format_akun(akun_list)) > 3000)
             if use_file_delivery:
                 teks_kirim = (
-                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                    f"Paket: <b>{paket['nama']}</b>\n"
-                    f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
-                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                    f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                    f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                    f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                    f"• Paket    : <b>{paket['nama']}</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                    f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                    f"Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
                 )
             else:
                 akun_teks = _format_akun(akun_list)
                 teks_kirim = (
-                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                    f"Paket: <b>{paket['nama']}</b>\n"
-                    f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
-                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"<b>DATA AKUN GMAIL</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"{akun_teks}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                    f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                    f"• Paket    : <b>{paket['nama']}</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                    f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                    f"<b>DATA AKUN GMAIL:</b>\n"
+                    f"{akun_teks}\n\n"
                     f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
                 )
 
@@ -1110,28 +1105,25 @@ async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int
             use_file_delivery = (qty > 5) or (len(_format_akun(akun_list)) > 3000)
             if use_file_delivery:
                 teks_kirim = (
-                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                    f"Kuantitas: <b>{qty} Pcs</b>\n"
-                    f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
-                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                    f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                    f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                    f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                    f"• Qty      : <b>{qty} Pcs</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+                    f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                    f"Karena jumlah pembelian besar, data akun lengkap dikirim via file txt."
                 )
             else:
                 akun_teks = _format_akun(akun_list)
                 teks_kirim = (
-                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
-                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
-                    f"Kuantitas: <b>{qty} Pcs</b>\n"
-                    f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
-                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
-                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"<b>DATA AKUN GMAIL</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"{akun_teks}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"<b>✅ TRANSAKSI SUKSES</b>\n\n"
+                    f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                    f"• Qty      : <b>{qty} Pcs</b>\n"
+                    f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+                    f"• Saldo    : <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"• Garansi  : <b>24 Jam</b> (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)</blockquote>\n"
+                    f"<b>DATA AKUN GMAIL:</b>\n"
+                    f"{akun_teks}\n\n"
                     f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
                 )
 
