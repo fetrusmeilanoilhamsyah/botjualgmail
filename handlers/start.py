@@ -24,6 +24,7 @@ def fmt_rupiah(n: int) -> str:
 
 _banner_cache = {
     "file_id": None,
+    "file_unique_id": None,
     "mtime": None,
     "last_checked": 0
 }
@@ -34,9 +35,10 @@ async def _load_banner_cache_on_startup(bot=None, chat_id=None):
     cached_file_id = await adb.get_setting("banner_file_id")
     if cached_file_id:
         _banner_cache["file_id"] = cached_file_id
+        _banner_cache["file_unique_id"] = await adb.get_setting("banner_file_unique_id")
         _banner_cache["mtime"] = await adb.get_setting("banner_mtime")
         _banner_cache["last_checked"] = time.time()
-        logger.info("✅ Banner cache loaded on startup: file_id=%s, mtime=%s", cached_file_id, _banner_cache["mtime"])
+        logger.info("✅ Banner cache loaded on startup: file_id=%s, file_unique_id=%s, mtime=%s", cached_file_id, _banner_cache["file_unique_id"], _banner_cache["mtime"])
 
 
 async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
@@ -66,14 +68,19 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
 
     if _banner_cache["file_id"] is not None and _banner_cache["mtime"] == current_mtime:
         banner_file_id = _banner_cache["file_id"]
+        banner_file_unique_id = _banner_cache.get("file_unique_id")
     else:
         banner_file_id = None
+        banner_file_unique_id = None
         if current_mtime:
             cached_file_id = await adb.get_setting("banner_file_id")
+            cached_file_unique_id = await adb.get_setting("banner_file_unique_id")
             cached_mtime   = await adb.get_setting("banner_mtime")
             if cached_file_id and cached_mtime == current_mtime:
                 banner_file_id = cached_file_id
+                banner_file_unique_id = cached_file_unique_id
                 _banner_cache["file_id"] = banner_file_id
+                _banner_cache["file_unique_id"] = banner_file_unique_id
                 _banner_cache["mtime"]   = current_mtime
                 _banner_cache["last_checked"] = now
             else:
@@ -96,17 +103,22 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
                                 parse_mode="HTML", reply_markup=markup
                             )
                     banner_file_id = sent.photo[-1].file_id
+                    banner_file_unique_id = sent.photo[-1].file_unique_id
                     await adb.set_setting("banner_file_id", banner_file_id)
+                    await adb.set_setting("banner_file_unique_id", banner_file_unique_id)
                     await adb.set_setting("banner_mtime", current_mtime)
                     _banner_cache["file_id"] = banner_file_id
+                    _banner_cache["file_unique_id"] = banner_file_unique_id
                     _banner_cache["mtime"]   = current_mtime
                     _banner_cache["last_checked"] = now
                     return
                 except Exception as e:
                     logger.error("Failed to upload banner: %s", e)
                     banner_file_id = None
+                    banner_file_unique_id = None
         else:
             _banner_cache["file_id"] = None
+            _banner_cache["file_unique_id"] = None
             _banner_cache["mtime"]   = None
             _banner_cache["last_checked"] = now
 
@@ -116,7 +128,20 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
             if q.message.photo:
                 # Cek apakah foto lama adalah banner asli (bukan QR atau foto lain)
                 current_file_id = q.message.photo[-1].file_id
-                if current_file_id == banner_file_id:
+                current_file_unique_id = q.message.photo[-1].file_unique_id
+                
+                is_banner = False
+                if banner_file_unique_id and current_file_unique_id == banner_file_unique_id:
+                    is_banner = True
+                elif current_file_id == banner_file_id:
+                    is_banner = True
+                    # Secara dinamis pelajari file_unique_id jika belum tersimpan
+                    if not banner_file_unique_id:
+                        banner_file_unique_id = current_file_unique_id
+                        _banner_cache["file_unique_id"] = current_file_unique_id
+                        asyncio.create_task(adb.set_setting("banner_file_unique_id", current_file_unique_id))
+                
+                if is_banner:
                     # ✅ FAST PATH: Banner → Banner — edit caption saja (1 API call, instan!)
                     try:
                         await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
