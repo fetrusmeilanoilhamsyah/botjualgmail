@@ -2,13 +2,16 @@
 handlers/beli.py - Beli Akun Gmail
 """
 import logging
+import uuid
+import io
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
 from database.db_async import adb
-from config import ADMIN_CONTACT, ADMIN_NOTIF_CHATS
+from config import ADMIN_CONTACT, ADMIN_NOTIF_CHATS, PAKASIR_ENABLED
+from handlers.topup import _buat_order_pakasir_async, generate_qr_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +131,7 @@ async def konfirmasi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ]
     else:
         keyboard = [
+            [InlineKeyboardButton("Bayar via QRIS", callback_data=f"bayar_qris_paket:{paket_id}", style="primary")],
             [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="primary")],
             [InlineKeyboardButton("Pilih Paket Lain", callback_data="beli_paket", style="danger")],
         ]
@@ -229,6 +233,7 @@ async def handle_beli_kuantitas_input(update: Update, ctx: ContextTypes.DEFAULT_
         ]
     else:
         kb = [
+            [InlineKeyboardButton("Bayar via QRIS", callback_data=f"bayar_qris_custom:{qty}", style="primary")],
             [InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="primary")],
             [InlineKeyboardButton("Batal", callback_data="beli_paket", style="danger")]
         ]
@@ -676,9 +681,560 @@ def _format_akun(akun_list: list) -> str:
     return "\n\n".join(lines)
 
 
+_pending_direct_checks = set()
+_pending_direct_batal = set()
+
+
+async def handle_bayar_qris_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    paket_id = int(q.data.split(":", 1)[1])
+    await q.answer("Memproses invoice...")
+
+    paket = await adb.get_paket_by_id(paket_id)
+    if not paket:
+        await q.answer("Paket tidak ditemukan.", show_alert=True)
+        return
+
+    # Cek stok
+    if paket["stok_tersedia"] < paket["kuantitas"]:
+        await q.answer("Stok paket ini sudah habis/tidak mencukupi.", show_alert=True)
+        return
+
+    user = update.effective_user
+    amount = paket["harga"]
+    order_id = f"DIR-{user.id}-{paket_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
+
+    await proses_buat_qris_direct(update, ctx, order_id, amount, f"Beli {paket['nama']}", user)
+
+
+async def handle_bayar_qris_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    qty = int(q.data.split(":", 1)[1])
+    await q.answer("Memproses invoice...")
+
+    # Cek stok
+    total_stok = await adb.get_stok_count()
+    if total_stok < qty:
+        await q.answer(f"Stok tidak mencukupi. Hanya tersedia {total_stok} pcs.", show_alert=True)
+        return
+
+    user = update.effective_user
+    harga_satuan = await adb.get_harga_satuan()
+    amount = qty * harga_satuan
+    order_id = f"CST-{user.id}-{qty}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
+
+    await proses_buat_qris_direct(update, ctx, order_id, amount, f"Beli {qty} Gmail Custom", user)
+
+
+async def proses_buat_qris_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE, order_id: str, amount: int, item_name: str, user):
+    from config import PAKASIR_ENABLED
+    from handlers.start import edit_menu_caption_or_text
+
+    msg = update.callback_query.message
+    await edit_menu_caption_or_text(ctx, user.id, msg.message_id, "Membuatkan QR Code... Mohon tunggu.", None)
+
+    # Buat order Pakasir
+    if PAKASIR_ENABLED:
+        order_data = await _buat_order_pakasir_async(order_id, amount, user.id)
+    else:
+        order_data = None
+
+    if PAKASIR_ENABLED and order_data is None:
+        await edit_menu_caption_or_text(
+            ctx, user.id, msg.message_id,
+            "Gagal membuat QR Code. Silakan coba beberapa saat lagi atau hubungi admin.",
+            None
+        )
+        return
+
+    if PAKASIR_ENABLED and order_data:
+        payment_number = order_data.get("payment_number", "")
+        total_payment  = order_data.get("total_payment", amount)
+        expired_at     = order_data.get("expired_at", "~15 menit")
+
+        try:
+            dt = datetime.fromisoformat(expired_at.replace("Z", "+00:00"))
+            from datetime import timedelta
+            dt_wib = dt + timedelta(hours=7)
+            readable_exp = dt_wib.strftime("%d/%m/%Y %H:%M") + " WIB"
+        except Exception:
+            readable_exp = expired_at[:16].replace("T", " ") + " WIB"
+
+        qr_img = generate_qr_bytes(payment_number)
+
+        teks = (
+            f"<b>Invoice Pembelian Gmail - Warung Gmail</b>\n\n"
+            f"Item: <b>{item_name}</b>\n"
+            f"Total Bayar: <b>{fmt_rupiah(total_payment)}</b>\n"
+            f"Order ID: <code>{order_id}</code>\n"
+            f"Batas Pembayaran: {readable_exp}\n\n"
+            "Scan QRIS di atas menggunakan e-wallet atau m-banking Anda.\n"
+            "Akun Gmail akan otomatis dikirimkan ke chat ini setelah pembayaran sukses terverifikasi."
+        )
+        kb = [
+            [
+                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_direct:{order_id}", style="primary"),
+                InlineKeyboardButton("Batalkan", callback_data=f"batal_direct:{order_id}", style="danger")
+            ]
+        ]
+
+        # Kirim foto QR terlebih dahulu sebelum menghapus pesan loading
+        sent_msg = await ctx.bot.send_photo(
+            chat_id=user.id,
+            photo=qr_img,
+            caption=teks,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+        # Simpan ke DB dengan ID pesan yang baru
+        await adb.create_topup(
+            user_id=user.id,
+            order_id=order_id,
+            jumlah=amount,
+            qr_chat_id=sent_msg.chat.id,
+            qr_message_id=sent_msg.message_id,
+        )
+    else:
+        # Mode manual
+        from config import ADMIN_CONTACT
+        teks = (
+            f"<b>Pembelian Gmail (Manual) - Warung Gmail</b>\n\n"
+            f"Item: <b>{item_name}</b>\n"
+            f"Total Bayar: <b>{fmt_rupiah(amount)}</b>\n"
+            f"Order ID: <code>{order_id}</code>\n\n"
+            "Hubungi admin untuk melakukan verifikasi pembayaran manual Anda.\n"
+            f"Kontak Admin: {ADMIN_CONTACT}"
+        )
+        kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
+        
+        # Simpan ke DB
+        await adb.create_topup(
+            user_id=user.id,
+            order_id=order_id,
+            jumlah=amount,
+            qr_chat_id=msg.chat.id,
+            qr_message_id=msg.message_id,
+        )
+        await edit_menu_caption_or_text(ctx, user.id, msg.message_id, teks, InlineKeyboardMarkup(kb))
+
+
+async def cek_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    order_id = q.data.split(":", 1)[1]
+
+    if order_id in _pending_direct_checks:
+        await q.answer("Status sedang diperiksa. Mohon tunggu...", show_alert=True)
+        return
+    _pending_direct_checks.add(order_id)
+
+    try:
+        await q.answer("Memeriksa status...")
+        topup = await adb.get_topup(order_id)
+        if not topup:
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+            await ctx.bot.send_message(
+                chat_id=q.from_user.id,
+                text="Data transaksi pembelian tidak ditemukan.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+                ]])
+            )
+            return
+
+        status = topup["status"]
+
+        if status == "pending":
+            from handlers.topup import _cek_status_pakasir_async
+            txn = await _cek_status_pakasir_async(order_id, topup["jumlah"])
+            if txn and txn.get("status") == "completed":
+                was_updated = await adb.complete_topup_if_pending(order_id)
+                if was_updated:
+                    # Tambah saldo user
+                    await adb.tambah_saldo(
+                        user_id=topup["user_id"],
+                        jumlah=topup["jumlah"],
+                        tipe="topup",
+                        keterangan="Top up via QRIS (Beli Langsung)",
+                        ref_id=order_id
+                    )
+                    # Jalankan eksekusi direct purchase
+                    await eksekusi_direct_purchase(ctx.bot, order_id, topup["user_id"], topup["jumlah"])
+                    status = "completed"
+            elif txn and txn.get("status") in ("expired", "cancelled"):
+                status = txn.get("status")
+                await adb.update_topup_status(order_id, status)
+
+        if status == "completed":
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+        elif status in ("expired", "cancelled"):
+            status_teks = "Kadaluarsa" if status == "expired" else "Dibatalkan"
+            await ctx.bot.send_message(
+                chat_id=topup["user_id"],
+                text=f"<b>Pembelian {status_teks}</b>\n\nQR Code sudah tidak berlaku. Silakan lakukan pembelian ulang.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Katalog Gmail", callback_data="beli_paket", style="primary"),
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
+                ]])
+            )
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+        else:
+            await q.answer("Pembayaran belum diterima. Silakan selesaikan pembayaran QRIS Anda.", show_alert=True)
+    finally:
+        _pending_direct_checks.discard(order_id)
+
+
+async def batal_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    order_id = q.data.split(":", 1)[1]
+
+    if order_id in _pending_direct_batal:
+        await q.answer("Proses pembatalan sedang berjalan...", show_alert=True)
+        return
+    _pending_direct_batal.add(order_id)
+
+    try:
+        await q.answer("Membatalkan...")
+        await adb.update_topup_status(order_id, "cancelled")
+        
+        await ctx.bot.send_message(
+            chat_id=q.from_user.id,
+            text="<b>Pembelian Dibatalkan</b>\n\nTransaksi pembelian Anda berhasil dibatalkan.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+            ]])
+        )
+        try:
+            await q.message.delete()
+        except Exception:
+            pass
+    finally:
+        _pending_direct_batal.discard(order_id)
+
+
+async def eksekusi_direct_purchase(bot, order_id: str, user_id: int, amount: int):
+    # Lock pembelian untuk mencegah double-execution
+    if user_id in _pending_purchases:
+        return
+    _pending_purchases.add(user_id)
+
+    try:
+        parts = order_id.split("-")
+        is_paket = parts[0] == "DIR"
+
+        if is_paket:
+            paket_id = int(parts[2])
+            paket = await adb.get_paket_by_id(paket_id)
+            if not paket:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, paket yang Anda beli tidak ditemukan di database. Saldo Anda tetap aman di akun."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            if paket["stok_tersedia"] < paket["kuantitas"]:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, saat pembayaran diverifikasi, stok untuk paket <b>{paket['nama']}</b> saat ini tidak mencukupi/habis. "
+                        f"Saldo Anda aman di akun. Silakan gunakan saldo ini untuk membeli kembali setelah stok diisi."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            # Ambil stok per paket
+            akun_list = await adb.ambil_stok(jumlah=paket["kuantitas"], paket_id=paket_id)
+            if akun_list is None:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, saat pembayaran diverifikasi, stok untuk paket <b>{paket['nama']}</b> baru saja terjual habis. "
+                        f"Saldo Anda aman di akun. Silakan gunakan saldo ini untuk membeli kembali setelah stok diisi."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            # Potong saldo
+            result = await adb.kurangi_saldo(user_id, paket["harga"], "beli", f"Beli {paket['nama']}")
+            if result is None:
+                await adb.rollback_stok([a["id"] for a in akun_list])
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, pemotongan saldo gagal diproses. Saldo Anda tetap aman."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            stok_ids = [a["id"] for a in akun_list]
+            await adb.tandai_stok_terjual_ke(stok_ids, user_id)
+
+            pembelian_id = await adb.create_pembelian(
+                user_id=user_id,
+                paket_id=paket_id,
+                harga_bayar=paket["harga"],
+                jumlah_akun=paket["kuantitas"],
+                stok_ids=stok_ids
+            )
+
+            use_file_delivery = (paket["kuantitas"] > 5) or (len(_format_akun(akun_list)) > 3000)
+            if use_file_delivery:
+                teks_kirim = (
+                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
+                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
+                    f"Paket: <b>{paket['nama']}</b>\n"
+                    f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
+                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
+                    f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                )
+            else:
+                akun_teks = _format_akun(akun_list)
+                teks_kirim = (
+                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
+                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
+                    f"Paket: <b>{paket['nama']}</b>\n"
+                    f"Total Harga: <b>{fmt_short_rupiah(paket['harga'])}</b>\n"
+                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"<b>DATA AKUN GMAIL</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{akun_teks}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
+                )
+
+            await bot.send_message(chat_id=user_id, text=teks_kirim, parse_mode="HTML")
+
+            if use_file_delivery:
+                await send_txt_file_delivery(bot, user_id, pembelian_id, akun_list)
+
+            await notify_admin_and_live_tx(bot, user_id, pembelian_id, paket["harga"], paket["nama"], paket["kuantitas"])
+
+        else:
+            qty = int(parts[2])
+            harga_satuan = await adb.get_harga_satuan()
+            total_harga = qty * harga_satuan
+
+            total_stok = await adb.get_stok_count()
+            if total_stok < qty:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, saat pembayaran diverifikasi, stok ready ({total_stok} pcs) kurang dari jumlah pembelian ({qty} pcs). "
+                        f"Saldo Anda aman di akun."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            akun_list = await adb.ambil_stok(jumlah=qty)
+            if akun_list is None:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, saat pembayaran diverifikasi, stok akun baru saja terjual habis. "
+                        f"Saldo Anda aman di akun."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            result = await adb.kurangi_saldo(user_id, total_harga, "beli", f"Beli {qty} Gmail Custom")
+            if result is None:
+                await adb.rollback_stok([a["id"] for a in akun_list])
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"<b>Pembayaran Berhasil!</b>\n\n"
+                        f"Nominal <b>{fmt_rupiah(amount)}</b> telah ditambahkan ke saldo Anda.\n\n"
+                        f"⚠️ Namun, pemotongan saldo gagal diproses. Saldo Anda tetap aman."
+                    ),
+                    parse_mode="HTML"
+                )
+                return
+
+            stok_ids = [a["id"] for a in akun_list]
+            await adb.tandai_stok_terjual_ke(stok_ids, user_id)
+
+            pembelian_id = await adb.create_pembelian(
+                user_id=user_id,
+                paket_id=99,
+                harga_bayar=total_harga,
+                jumlah_akun=qty,
+                stok_ids=stok_ids
+            )
+
+            use_file_delivery = (qty > 5) or (len(_format_akun(akun_list)) > 3000)
+            if use_file_delivery:
+                teks_kirim = (
+                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
+                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
+                    f"Kuantitas: <b>{qty} Pcs</b>\n"
+                    f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
+                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
+                    f"Karena jumlah pembelian yang besar, data akun lengkap telah dikirim dalam file <b>Gmail_Order_{pembelian_id}.txt</b> di bawah ini."
+                )
+            else:
+                akun_teks = _format_akun(akun_list)
+                teks_kirim = (
+                    f"<b>Transaksi Sukses - Warung Gmail</b>\n\n"
+                    f"No. Invoice: <code>#{pembelian_id}</code>\n"
+                    f"Kuantitas: <b>{qty} Pcs</b>\n"
+                    f"Total Harga: <b>{fmt_short_rupiah(total_harga)}</b>\n"
+                    f"Sisa Saldo: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n"
+                    f"Garansi: 24 Jam (s/d {(datetime.now() + timedelta(hours=24)).strftime('%d/%m/%Y %H:%M')} WIB)\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"<b>DATA AKUN GMAIL</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{akun_teks}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"Simpan baik-baik data akun di atas. Garansi berlaku 24 jam untuk kegagalan login pertama."
+                )
+
+            await bot.send_message(chat_id=user_id, text=teks_kirim, parse_mode="HTML")
+
+            if use_file_delivery:
+                await send_txt_file_delivery(bot, user_id, pembelian_id, akun_list)
+
+            await notify_admin_and_live_tx(bot, user_id, pembelian_id, total_harga, f"{qty} Akun Gmail Custom", qty)
+
+    except Exception as e:
+        logger.exception("[beli] Error dalam eksekusi_direct_purchase: %s", e)
+    finally:
+        _pending_purchases.discard(user_id)
+
+
+async def send_txt_file_delivery(bot, user_id: int, pembelian_id: int, akun_list: list):
+    import io
+    txt_lines = [
+        f"==================================================",
+        f"DATA AKUN GMAIL - INVOICE #{pembelian_id}",
+        f"==================================================\n",
+        "FORMAT IMPOR (Email|Password|Recovery):",
+        "--------------------------------------------------"
+    ]
+    for a in akun_list:
+        rec = a.get("recovery") or ""
+        txt_lines.append(f"{a['email']}|{a['password']}|{rec}")
+    txt_lines.append("--------------------------------------------------\n")
+    txt_lines.append("DETAIL AKUN:")
+    txt_lines.append("--------------------------------------------------")
+    for i, a in enumerate(akun_list, 1):
+        txt_lines.append(f"#{i}")
+        txt_lines.append(f"Email   : {a['email']}")
+        txt_lines.append(f"Password: {a['password']}")
+        if a.get("recovery"):
+            txt_lines.append(f"Recovery: {a['recovery']}")
+        if a.get("tgl_buat"):
+            txt_lines.append(f"Dibuat  : {a['tgl_buat']}")
+        if a.get("catatan"):
+            txt_lines.append(f"Catatan : {a['catatan']}")
+        txt_lines.append("")
+    txt_lines.append("--------------------------------------------------")
+    txt_lines.append("Terima kasih telah berbelanja di Warung Gmail.")
+    txt_lines.append("==================================================")
+    
+    txt_content = "\n".join(txt_lines)
+    bio = io.BytesIO(txt_content.encode("utf-8"))
+    bio.name = f"Gmail_Order_{pembelian_id}.txt"
+    
+    try:
+        await bot.send_document(
+            chat_id=user_id,
+            document=bio,
+            filename=f"Gmail_Order_{pembelian_id}.txt",
+            caption=f"Detail Akun Gmail Invoice #{pembelian_id}"
+        )
+    except Exception as e:
+        logger.error("[beli] Gagal mengirim dokumen akun: %s", e)
+
+
+async def notify_admin_and_live_tx(bot, user_id: int, pembelian_id: int, harga: int, item_name: str, qty: int):
+    try:
+        user_row = await adb.get_user(user_id)
+        full_name = dict(user_row).get("full_name", "Pengguna") if user_row else "Pengguna"
+        username = dict(user_row).get("username", "-") if user_row else "-"
+        notif = (
+            f"PEMBELIAN BARU (QRIS DIRECT)\n\n"
+            f"User: {full_name} (@{username}) [<code>{user_id}</code>]\n"
+            f"Item: {item_name}\n"
+            f"Harga: {fmt_rupiah(harga)}\n"
+            f"ID: #{pembelian_id}"
+        )
+        for chat_id in ADMIN_NOTIF_CHATS:
+            try:
+                await bot.send_message(chat_id=chat_id, text=notif, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("[beli] Gagal notif admin %d: %s", chat_id, e)
+    except Exception as e:
+        logger.debug("[beli] Gagal notif admin: %s", e)
+
+    try:
+        from handlers.live_tx import send_live_tx, censor_name, censor_id
+        from config import BOT_USERNAME
+        user_row = await adb.get_user(user_id)
+        full_name = dict(user_row).get("full_name", "Pengguna") if user_row else "Pengguna"
+        c_name = censor_name(full_name)
+        c_uid = censor_id(user_id)
+        live_teks = (
+            f"<b>#Invoice_{pembelian_id} Purchase Completed (QRIS)</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
+            f"📦 <b>Item</b>: {item_name}\n"
+            f"💰 <b>Total</b>: {fmt_short_rupiah(harga)} ({fmt_rupiah(harga)})\n"
+            f"🕐 <b>Masa Garansi</b>: 24 Jam\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"➡️ Beli Gmail Otomatis @{BOT_USERNAME}"
+        )
+        await send_live_tx(bot, live_teks)
+    except Exception as e:
+        logger.warning("[beli] Gagal kirim live tx: %s", e)
+
+
 def register(app):
     app.add_handler(CallbackQueryHandler(show_paket,           pattern="^beli_paket$"))
     app.add_handler(CallbackQueryHandler(show_beli_custom,     pattern="^beli_custom$"))
     app.add_handler(CallbackQueryHandler(eksekusi_beli_custom, pattern="^eksekusi_beli_custom$"))
     app.add_handler(CallbackQueryHandler(konfirmasi_beli,      pattern="^konfirmasi_beli:"))
     app.add_handler(CallbackQueryHandler(eksekusi_beli,        pattern="^eksekusi_beli:"))
+    app.add_handler(CallbackQueryHandler(handle_bayar_qris_paket, pattern="^bayar_qris_paket:"))
+    app.add_handler(CallbackQueryHandler(handle_bayar_qris_custom, pattern="^bayar_qris_custom:"))
+    app.add_handler(CallbackQueryHandler(cek_direct,           pattern="^cek_direct:"))
+    app.add_handler(CallbackQueryHandler(batal_direct,         pattern="^batal_direct:"))

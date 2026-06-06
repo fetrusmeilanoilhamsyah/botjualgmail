@@ -95,8 +95,8 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
         if not all([order_id, amount, status]):
             return web.Response(status=400, text="Missing required fields")
 
-        # Hanya proses order_id yang diawali "TU-" (format topup kita)
-        if not order_id.startswith("TU-"):
+        # Proses order_id topup (TU-), direct paket (DIR-), dan custom (CST-)
+        if not (order_id.startswith("TU-") or order_id.startswith("DIR-") or order_id.startswith("CST-")):
             logger.warning("[Webhook-gmail] Order ID tidak dikenal: %s", order_id)
             return web.Response(status=200, text="OK")
 
@@ -138,11 +138,12 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                 return web.Response(status=200, text="Already processed")
 
             # Tambah saldo user
+            keterangan = "Top up via QRIS (Beli Langsung)" if not order_id.startswith("TU-") else "Top up via QRIS"
             result = await adb.tambah_saldo(
                 user_id=topup["user_id"],
                 jumlah=topup["jumlah"],
                 tipe="topup",
-                keterangan="Top up via QRIS",
+                keterangan=keterangan,
                 ref_id=order_id
             )
 
@@ -164,74 +165,78 @@ async def handle_pakasir_webhook(request: web.Request) -> web.Response:
                     except Exception as e:
                         logger.debug("[Webhook-gmail] Gagal hapus QR: %s", e)
 
-                # Notif user
-                def fmt_rupiah(n):
-                    return f"Rp{n:,.0f}".replace(",", ".")
+                if not order_id.startswith("TU-"):
+                    from handlers.beli import eksekusi_direct_purchase
+                    asyncio.create_task(eksekusi_direct_purchase(bot, order_id, topup["user_id"], topup["jumlah"]))
+                else:
+                    # Notif user
+                    def fmt_rupiah(n):
+                        return f"Rp{n:,.0f}".replace(",", ".")
 
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Beli Gmail Sekarang", callback_data="beli_paket", style="primary"),
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
-                ]])
+                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                    kb = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Beli Gmail Sekarang", callback_data="beli_paket", style="primary"),
+                        InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
+                    ]])
 
-                notif_text = (
-                    f"<b>Top Up Berhasil!</b>\n\n"
-                    f"Nominal: <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
-                    f"Saldo sekarang: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n\n"
-                    "Yuk, beli akun Gmail sekarang!"
-                )
-
-                try:
-                    asyncio.create_task(bot.send_message(
-                        chat_id=topup["user_id"],
-                        text=notif_text,
-                        parse_mode="HTML",
-                        reply_markup=kb
-                    ))
-                except Exception as e:
-                    logger.warning("[Webhook-gmail] Gagal notif user: %s", e)
-
-                # Kirim ke live transaction feed
-                try:
-                    from config import CHANNEL_LIVE_TX, BOT_USERNAME
-                    from handlers.live_tx import censor_name, censor_id
-                    user_row = await adb.get_user(topup["user_id"])
-                    c_name = censor_name(user_row["full_name"] if user_row else "Pengguna")
-                    c_uid = censor_id(topup["user_id"])
-                    
-                    def fmt_short_rupiah(n):
-                        if n >= 1000000:
-                            val = n / 1000000
-                            if val.is_integer():
-                                return f"{int(val)} Jt"
-                            return f"{val:,.1f}".replace(".", ",").replace(",0", "") + " Jt"
-                        elif n >= 1000:
-                            val = n / 1000
-                            if val.is_integer():
-                                return f"{int(val)}K"
-                            formatted = f"{val:,.1f}".replace(".", ",")
-                            if formatted.endswith(",0"):
-                                formatted = formatted[:-2]
-                            return f"{formatted}K"
-                        return str(n)
-
-                    live_teks = (
-                        f"<b>#{order_id} Top Up Completed</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
-                        f"💰 <b>Nominal</b>: {fmt_short_rupiah(topup['jumlah'])} ({fmt_rupiah(topup['jumlah'])})\n"
-                        f"🗂️ <b>Metode</b>: QRIS Otomatis\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"➡️ Top Up Saldo @{BOT_USERNAME}"
+                    notif_text = (
+                        f"<b>Top Up Berhasil!</b>\n\n"
+                        f"Nominal: <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
+                        f"Saldo sekarang: <b>{fmt_rupiah(result['saldo_sesudah'])}</b>\n\n"
+                        "Yuk, beli akun Gmail sekarang!"
                     )
-                    if bot and CHANNEL_LIVE_TX:
+
+                    try:
                         asyncio.create_task(bot.send_message(
-                            chat_id=CHANNEL_LIVE_TX,
-                            text=live_teks,
-                            parse_mode="HTML"
+                            chat_id=topup["user_id"],
+                            text=notif_text,
+                            parse_mode="HTML",
+                            reply_markup=kb
                         ))
-                except Exception as e:
-                    logger.warning("[Webhook-gmail] Gagal kirim live tx: %s", e)
+                    except Exception as e:
+                        logger.warning("[Webhook-gmail] Gagal notif user: %s", e)
+
+                    # Kirim ke live transaction feed
+                    try:
+                        from config import CHANNEL_LIVE_TX, BOT_USERNAME
+                        from handlers.live_tx import censor_name, censor_id
+                        user_row = await adb.get_user(topup["user_id"])
+                        c_name = censor_name(user_row["full_name"] if user_row else "Pengguna")
+                        c_uid = censor_id(topup["user_id"])
+                        
+                        def fmt_short_rupiah(n):
+                            if n >= 1000000:
+                                val = n / 1000000
+                                if val.is_integer():
+                                    return f"{int(val)} Jt"
+                                return f"{val:,.1f}".replace(".", ",").replace(",0", "") + " Jt"
+                            elif n >= 1000:
+                                val = n / 1000
+                                if val.is_integer():
+                                    return f"{int(val)}K"
+                                formatted = f"{val:,.1f}".replace(".", ",")
+                                if formatted.endswith(",0"):
+                                    formatted = formatted[:-2]
+                                return f"{formatted}K"
+                            return str(n)
+
+                        live_teks = (
+                            f"<b>#{order_id} Top Up Completed</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
+                            f"💰 <b>Nominal</b>: {fmt_short_rupiah(topup['jumlah'])} ({fmt_rupiah(topup['jumlah'])})\n"
+                            f"🗂️ <b>Metode</b>: QRIS Otomatis\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"➡️ Top Up Saldo @{BOT_USERNAME}"
+                        )
+                        if bot and CHANNEL_LIVE_TX:
+                            asyncio.create_task(bot.send_message(
+                                chat_id=CHANNEL_LIVE_TX,
+                                text=live_teks,
+                                parse_mode="HTML"
+                            ))
+                    except Exception as e:
+                        logger.warning("[Webhook-gmail] Gagal kirim live tx: %s", e)
 
         else:
             # expired / cancelled
