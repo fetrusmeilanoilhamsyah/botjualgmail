@@ -152,10 +152,23 @@ def main():
         q = update.callback_query
         await q.answer()
         db.set_session(update.effective_user.id, "admin_broadcast_preview", {"menu_msg_id": q.message.message_id})
+        
+        teks = (
+            "<b>📢 BROADCAST PESAN BARU</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "Silakan ketik pesan yang ingin Anda siarkan ke seluruh pengguna bot.\n"
+            "Mendukung format HTML seperti:\n"
+            "• <b>Teks Tebal</b>\n"
+            "• <i>Teks Miring</i>\n"
+            "• <code>Teks Monospace (Kode)</code>\n"
+            "• <a href=\"https://t.me/\">Link Teks</a>\n\n"
+            "Ketik pesan Anda sekarang dan kirimkan ke chat ini..."
+        )
+        
         from handlers.start import kirim_atau_edit_menu
         await kirim_atau_edit_menu(
             update, ctx,
-            "Broadcast Pesan\n\nKetik pesan yang ingin dikirim ke semua user.\nMendukung HTML format.",
+            teks,
             __import__("telegram").InlineKeyboardMarkup([[
                 __import__("telegram").InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
             ]])

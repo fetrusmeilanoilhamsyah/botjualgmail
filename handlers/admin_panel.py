@@ -28,26 +28,60 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s = await adb.get_admin_stats()
 
     teks = (
-        f"<b>Panel Admin - Bot Jual Gmail</b>\n\n"
-        f"Total User: {s['total_user']:,}\n"
-        f"Transaksi Hari Ini: {s['trx_hari_ini']}\n"
-        f"Klaim Garansi Pending: {s['garansi_pending']}\n\n"
-        "Pilih menu:"
+        f"<b>⚙️ CONTROL PANEL ADMIN</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"<tg-emoji emoji-id=\"6158694317452956325\">👥</tg-emoji> <b>Total Pengguna:</b> {s['total_user']:,} orang\n"
+        f"<tg-emoji emoji-id=\"6003502340001238882\">📈</tg-emoji> <b>Transaksi Hari Ini:</b> {s['trx_hari_ini']} sukses\n"
+        f"<tg-emoji emoji-id=\"6159113038109611127\">🚨</tg-emoji> <b>Klaim Garansi Pending:</b> <b>{s['garansi_pending']}</b> request\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"Silakan pilih menu manajemen di bawah untuk mengelola operasional bot:"
     )
 
     kb = [
         [
-            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="primary"),
-            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="primary"),
+            InlineKeyboardButton(
+                "Statistik",
+                callback_data="admin_stat",
+                style="primary",
+                icon_custom_emoji_id="5244837092042750681"
+            ),
+            InlineKeyboardButton(
+                "Kelola Stok",
+                callback_data="admin_stok_refresh",
+                style="primary",
+                icon_custom_emoji_id="6156673548225090260"
+            ),
         ],
         [
-            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="primary"),
-            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="primary"),
+            InlineKeyboardButton(
+                "Paket & Harga",
+                callback_data="admin_paket",
+                style="primary",
+                icon_custom_emoji_id="6156923364997862692"
+            ),
+            InlineKeyboardButton(
+                "Klaim Garansi",
+                callback_data="admin_garansi_list",
+                style="primary",
+                icon_custom_emoji_id="6158892349805040268"
+            ),
         ],
         [
-            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="primary"),
+            InlineKeyboardButton(
+                "Broadcast (Kirim Pesan)",
+                callback_data="admin_broadcast_start_cb",
+                style="primary",
+                icon_custom_emoji_id="6159148926856336305"
+            ),
         ],
-        [InlineKeyboardButton("Menu Utama Bot",         callback_data="menu_utama", style="danger")],
+        [
+            InlineKeyboardButton(
+                "Menu Utama Bot",
+                callback_data="menu_utama",
+                style="danger",
+                icon_custom_emoji_id="6003735582495216112"
+            )
+        ],
     ]
 
     markup = InlineKeyboardMarkup(kb)

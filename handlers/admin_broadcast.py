@@ -7,6 +7,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
+from database import db
 from database.db_async import adb
 from middleware.auth import admin_only
 from config import BROADCAST_DELAY
@@ -26,10 +27,15 @@ async def cmd_broadcast_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         pass
 
     teks = (
-        "<b>Broadcast Pesan - Warung Gmail</b>\n\n"
-        "Ketik pesan yang ingin dikirim ke seluruh pengguna.\n"
-        "Mendukung tag HTML seperti: <b>tebal</b>, <i>miring</i>, <code>kode</code>.\n\n"
-        "Silakan ketik pesan Anda:"
+        "<b>📢 BROADCAST PESAN BARU</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Silakan ketik pesan yang ingin Anda siarkan ke seluruh pengguna bot.\n"
+        "Mendukung format HTML seperti:\n"
+        "• <b>Teks Tebal</b>\n"
+        "• <i>Teks Miring</i>\n"
+        "• <code>Teks Monospace (Kode)</code>\n"
+        "• <a href=\"https://t.me/\">Link Teks</a>\n\n"
+        "Ketik pesan Anda sekarang dan kirimkan ke chat ini..."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
     msg = await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
@@ -57,15 +63,25 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     total_user = await adb.get_total_users()
     preview = (
-        f"<b>Preview Broadcast - Warung Gmail</b>\n\n"
-        f"{'─'*30}\n"
+        f"<b>🚨 PREVIEW SIARAN PESAN</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>Isi Pesan Broadcast:</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
         f"{pesan}\n"
-        f"{'─'*30}\n\n"
-        f"Target Penerima: <b>{total_user} User</b>\n\n"
-        "Kirim broadcast sekarang?"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"🎯 <b>Target Penerima:</b> {total_user:,} pengguna\n"
+        f"⚠️ <i>Mohon periksa kembali keselarasan format teks sebelum mengirim.</i>\n\n"
+        f"Apakah Anda ingin menyiarkan pesan ini sekarang?"
     )
     kb = [
-        [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="primary")],
+        [
+            InlineKeyboardButton(
+                "YA, KIRIM SEKARANG",
+                callback_data="admin_broadcast_execute",
+                style="primary",
+                icon_custom_emoji_id="6159148926856336305"
+            )
+        ],
         [InlineKeyboardButton("Edit Ulang",         callback_data="admin_broadcast_reedit", style="danger")],
         [InlineKeyboardButton("Batal",              callback_data="admin_panel", style="danger")],
     ]
@@ -100,7 +116,10 @@ async def admin_broadcast_reedit(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     db.set_session(user.id, "admin_broadcast_preview", {"menu_msg_id": q.message.message_id})
     await q.edit_message_text(
-        "Ketik ulang pesan broadcast Anda:",
+        "<b>✏️ EDIT PESAN BROADCAST</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Silakan ketik ulang pesan broadcast Anda ke chat ini...",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]])
     )
 
@@ -129,7 +148,12 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     sukses    = 0
     gagal     = 0
 
-    await q.edit_message_text(f"Mengirim pesan ke {total} user...\n\nMohon tunggu proses selesai.")
+    await q.edit_message_text(
+        f"<b>⏳ MENGIRIM BROADCAST...</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"Pesan sedang disiarkan ke <b>{total:,}</b> pengguna.\n"
+        f"Mohon tunggu sampai proses pengiriman selesai sepenuhnya..."
+    )
 
     for uid in user_ids:
         try:
@@ -143,12 +167,22 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     await adb.log_broadcast(user.id, pesan, sukses, gagal)
 
     teks_selesai = (
-        f"<b>Broadcast Selesai!</b>\n\n"
-        f"• Sukses: {sukses} user\n"
-        f"• Gagal: {gagal} user\n"
-        f"• Total: {total} user"
+        f"<b>📢 PROSES BROADCAST SELESAI!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"📊 <b>Laporan Hasil Siaran:</b>\n"
+        f"• ✅ <b>Sukses Terkirim:</b> {sukses:,} user\n"
+        f"• ❌ <b>Gagal Terkirim:</b> {gagal:,} user\n"
+        f"• 👥 <b>Total Target:</b> {total:,} user\n\n"
+        f"Riwayat siaran broadcast telah berhasil direkam ke database."
     )
-    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
+    kb = [[
+        InlineKeyboardButton(
+            "Kembali ke Panel Admin",
+            callback_data="admin_panel",
+            style="primary",
+            icon_custom_emoji_id="6156673548225090260"
+        )
+    ]]
 
     if menu_msg_id:
         try:
