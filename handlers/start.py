@@ -357,11 +357,13 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Answer SEGERA agar spinner di tombol langsung berhenti
     await q.answer()
 
-    u = await adb.get_user(user.id)
+    u, ref_stats = await asyncio.gather(
+        adb.get_user(user.id),
+        adb.get_referral_stats(user.id)
+    )
     if not u:
         return
 
-    ref_stats = await adb.get_referral_stats(user.id)
     saldo     = fmt_rupiah(u["saldo"])
     teks = (
         f"<tg-emoji emoji-id=\"5452069934089641166\">👤</tg-emoji> <b>INFO AKUN</b>\n\n"
