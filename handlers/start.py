@@ -225,15 +225,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     is_admin = user.id in ADMIN_IDS
     teks = (
         f"🛒 <b><a href=\"https://t.me/warunggmail\">WARUNG GMAIL BOT</a></b>\n"
-        f"━━━━━━━━━━━━━━━━━━━\n\n"
-        f"• ID User    : <code>{user.id}</code>\n"
-        f"• Saldo      : <b>{fmt_rupiah(saldo)}</b>\n\n"
-        f"<b>STATISTIK LAYANAN:</b>\n"
-        f"• Total User : {stats['total_user']:,} orang\n"
-        f"• Total Trx  : {stats['total_trx']:,} sukses\n"
-        f"• Stok Ready : {stats['stok_tersedia']:,} pcs\n"
-        f"• Terjual    : {stats['akun_terjual']:,} pcs\n\n"
-        f"━━━━━━━━━━━━━━━━━━━"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"👤 ID User   : <code>{user.id}</code>\n"
+        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo     : <b>{fmt_rupiah(saldo)}</b>\n"
+        f"<tg-emoji emoji-id=\"6158694317452956321\">👥</tg-emoji> Total User: <b>{stats['total_user']:,}</b>\n"
+        f"📈 Total Trx : <b>{stats['total_trx']:,} Tx</b>\n"
+        f"📦 Stok Ready: <b>{stats['stok_tersedia']:,} Pcs</b>\n"
+        f"🛍️ Terjual   : <b>{stats['akun_terjual']:,} Pcs</b>\n"
+        f"━━━━━━━━━━━━━━━━━━"
     )
 
     channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
