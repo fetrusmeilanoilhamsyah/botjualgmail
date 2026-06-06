@@ -41,35 +41,20 @@ async def _load_banner_cache_on_startup(bot=None, chat_id=None):
 
 async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
     """
-    Helper untuk mengirim atau mengedit menu.
+    Helper untuk mengirim atau mengedit menu dengan menyertakan banner.
+    Jika banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel!).
+    Jika banner tidak ada, fallback ke teks biasa.
     
-    STRATEGI KECEPATAN:
-    - Callback query (navigasi antar menu) → SELALU edit_message_text (1 API call, INSTAN)
-    - Command /start baru → kirim foto banner (kalau ada) atau teks baru
-    
-    Kenapa tidak pakai banner di navigasi?
-    Karena delete+send_photo = 2 API calls + render ulang = freeze 1-2 detik per klik.
-    edit_message_text = 1 API call = respons < 200ms.
+    FAST PATH: Kalau pesan sebelumnya sudah foto → edit_message_caption (1 API call, instan).
+    Foto→foto tidak pernah delete/resend, jadi tidak ada freeze.
     """
     user = update.effective_user
     q = update.callback_query
 
-    # ── PATH CEPAT: Callback query → SELALU edit teks (tidak ada delete/send foto) ──
-    if q:
-        try:
-            await q.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
-        except Exception:
-            # Fallback: edit gagal (misal: pesan sudah terlalu lama) → kirim baru
-            try:
-                await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
-            except Exception as e:
-                logger.error("kirim_atau_edit_menu callback fallback error: %s", e)
-        return
-
-    # ── PATH NORMAL: Command /start atau pesan baru ────────────────────────────
-    # Cek banner cache (throttle disk check 60 detik)
     import time
     now = time.time()
+
+    # ── Cek banner cache (throttle disk check 60 detik) ──
     if _banner_cache["mtime"] is not None and now - _banner_cache["last_checked"] < 60:
         current_mtime = _banner_cache["mtime"]
     else:
@@ -96,12 +81,20 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
                 try:
                     logger.info("Uploading banner...")
                     with open(BANNER_PATH, "rb") as f:
-                        sent = await update.message.reply_photo(
-                            photo=f,
-                            caption=teks,
-                            parse_mode="HTML",
-                            reply_markup=markup
-                        )
+                        if q:
+                            try:
+                                await q.message.delete()
+                            except Exception:
+                                pass
+                            sent = await ctx.bot.send_photo(
+                                chat_id=user.id, photo=f,
+                                caption=teks, parse_mode="HTML", reply_markup=markup
+                            )
+                        else:
+                            sent = await update.message.reply_photo(
+                                photo=f, caption=teks,
+                                parse_mode="HTML", reply_markup=markup
+                            )
                     banner_file_id = sent.photo[-1].file_id
                     await adb.set_setting("banner_file_id", banner_file_id)
                     await adb.set_setting("banner_mtime", current_mtime)
@@ -117,17 +110,48 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
             _banner_cache["mtime"]   = None
             _banner_cache["last_checked"] = now
 
-    # Kirim dengan banner (jika ada) atau teks saja
+    # ── Kirim/Edit pesan menu ──
     if banner_file_id and len(teks) <= 1000:
-        await ctx.bot.send_photo(
-            chat_id=user.id,
-            photo=banner_file_id,
-            caption=teks,
-            parse_mode="HTML",
-            reply_markup=markup
-        )
+        if q:
+            if q.message.photo:
+                # ✅ FAST PATH: Pesan lama sudah foto → edit caption saja (1 API call, instan!)
+                try:
+                    await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
+                    return
+                except Exception:
+                    pass
+            # Pesan lama adalah teks → hapus dan kirim foto banner
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+            await ctx.bot.send_photo(
+                chat_id=user.id, photo=banner_file_id,
+                caption=teks, parse_mode="HTML", reply_markup=markup
+            )
+        else:
+            await ctx.bot.send_photo(
+                chat_id=user.id, photo=banner_file_id,
+                caption=teks, parse_mode="HTML", reply_markup=markup
+            )
     else:
-        await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
+        # Tidak ada banner atau teks > 1000 karakter
+        if q:
+            if q.message.photo:
+                # Pesan lama foto → hapus dan kirim teks
+                try:
+                    await q.message.delete()
+                except Exception:
+                    pass
+                await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+            else:
+                # Pesan lama teks → edit langsung (1 API call)
+                try:
+                    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
+                except Exception:
+                    await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
+        else:
+            await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
 
 
 async def edit_menu_caption_or_text(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, teks: str, markup: InlineKeyboardMarkup):
