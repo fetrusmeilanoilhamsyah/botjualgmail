@@ -44,12 +44,15 @@ def _verify_hmac(raw_body: bytes, signature: str, secret: str) -> bool:
     """Verifikasi HMAC-SHA256 dari Pakasir."""
     if not secret or not signature:
         return not secret  # jika secret tidak diset, skip verifikasi
-    expected = hmac.new(
-        secret.encode(), raw_body, hashlib.sha256
-    ).hexdigest()
     try:
+        expected = hmac.new(
+            key=secret.encode(),
+            msg=raw_body,
+            digestmod=hashlib.sha256
+        ).hexdigest()
         return hmac.compare_digest(expected, signature.lower())
-    except Exception:
+    except Exception as e:
+        logger.error("[Webhook-gmail] HMAC verification failed: %s", e)
         return False
 
 
