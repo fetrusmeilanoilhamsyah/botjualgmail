@@ -380,13 +380,12 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         c_uid = censor_id(topup["user_id"])
                         
                         live_teks = (
-                            f"<b>#{order_id} Top Up Completed</b>\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
-                            f"💰 <b>Nominal</b>: {fmt_short_rupiah(topup['jumlah'])} ({fmt_rupiah(topup['jumlah'])})\n"
-                            f"🗂️ <b>Metode</b>: QRIS Otomatis\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"➡️ Top Up Saldo @{BOT_USERNAME}"
+                            f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> <b>TOP UP COMPLETED</b>\n\n"
+                            f"<blockquote>• Order ID : <code>{order_id}</code>\n"
+                            f"• User     : {c_name} [<code>{c_uid}</code>]\n"
+                            f"• Nominal  : <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
+                            f"• Metode   : <b>QRIS Otomatis</b></blockquote>\n"
+                            f"➡️ Top Up Saldo Otomatis @{BOT_USERNAME}"
                         )
                         await send_live_tx(ctx.bot, live_teks)
                     except Exception as e:

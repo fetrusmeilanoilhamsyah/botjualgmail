@@ -447,13 +447,12 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             c_name = censor_name(user.full_name)
             c_uid = censor_id(user.id)
             live_teks = (
-                f"<b>#Invoice_{pembelian_id} Purchase Completed</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
-                f"📦 <b>Item</b>: {qty} Akun Gmail\n"
-                f"💰 <b>Total</b>: {fmt_short_rupiah(total_harga)} ({fmt_rupiah(total_harga)})\n"
-                f"🕐 <b>Masa Garansi</b>: 24 Jam\n"
-                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>PURCHASE COMPLETED</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• User     : {c_name} [<code>{c_uid}</code>]\n"
+                f"• Item     : <b>{qty} Pcs Gmail</b>\n"
+                f"• Total    : <b>{fmt_rupiah(total_harga)}</b>\n"
+                f"• Garansi  : <b>24 Jam</b></blockquote>\n"
                 f"➡️ Beli Gmail Otomatis @{BOT_USERNAME}"
             )
             await send_live_tx(ctx.bot, live_teks)
@@ -648,13 +647,12 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             c_name = censor_name(user.full_name)
             c_uid = censor_id(user.id)
             live_teks = (
-                f"<b>#Invoice_{pembelian_id} Purchase Completed</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
-                f"📦 <b>Paket</b>: {paket['nama']}\n"
-                f"💰 <b>Total</b>: {fmt_short_rupiah(paket['harga'])} ({fmt_rupiah(paket['harga'])})\n"
-                f"🕐 <b>Masa Garansi</b>: 24 Jam\n"
-                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>PURCHASE COMPLETED</b>\n\n"
+                f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+                f"• User     : {c_name} [<code>{c_uid}</code>]\n"
+                f"• Item     : <b>{paket['nama']}</b>\n"
+                f"• Total    : <b>{fmt_rupiah(paket['harga'])}</b>\n"
+                f"• Garansi  : <b>24 Jam</b></blockquote>\n"
                 f"➡️ Beli Gmail Otomatis @{BOT_USERNAME}"
             )
             await send_live_tx(ctx.bot, live_teks)
@@ -1213,13 +1211,12 @@ async def notify_admin_and_live_tx(bot, user_id: int, pembelian_id: int, harga: 
         c_name = censor_name(full_name)
         c_uid = censor_id(user_id)
         live_teks = (
-            f"<b>#Invoice_{pembelian_id} Purchase Completed (QRIS)</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
-            f"📦 <b>Item</b>: {item_name}\n"
-            f"💰 <b>Total</b>: {fmt_short_rupiah(harga)} ({fmt_rupiah(harga)})\n"
-            f"🕐 <b>Masa Garansi</b>: 24 Jam\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> <b>PURCHASE COMPLETED (QRIS)</b>\n\n"
+            f"<blockquote>• Invoice  : <code>#{pembelian_id}</code>\n"
+            f"• User     : {c_name} [<code>{c_uid}</code>]\n"
+            f"• Item     : <b>{item_name}</b>\n"
+            f"• Total    : <b>{fmt_rupiah(harga)}</b>\n"
+            f"• Garansi  : <b>24 Jam</b></blockquote>\n"
             f"➡️ Beli Gmail Otomatis @{BOT_USERNAME}"
         )
         await send_live_tx(bot, live_teks)
