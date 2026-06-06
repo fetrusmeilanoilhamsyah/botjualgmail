@@ -2,6 +2,7 @@
 handlers/admin_stok.py - Kelola Stok Gmail (Panel Admin)
 """
 import logging
+import asyncio
 from io import StringIO
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler

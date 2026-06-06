@@ -5,6 +5,7 @@ handlers/referral.py - Sistem Referral
 - Anti-bot: jika ≥5 user daftar dalam 10 detik → ban
 """
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
