@@ -826,25 +826,25 @@ async def cek_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     order_id = q.data.split(":", 1)[1]
 
     if order_id in _pending_direct_checks:
-        await q.answer("Status sedang diperiksa. Mohon tunggu...", show_alert=True)
+        await q.answer("⏳ Status sedang diperiksa. Mohon tunggu...", show_alert=True)
         return
     _pending_direct_checks.add(order_id)
 
+    # ✅ Jawab callback query DULUAN agar spinner loading langsung berhenti/toast muncul
+    await q.answer("🔍 Memeriksa status...")
+
     try:
-        await q.answer("Memeriksa status...")
         topup = await adb.get_topup(order_id)
         if not topup:
             try:
-                await q.message.delete()
+                await q.edit_message_caption(
+                    caption="❌ Data transaksi pembelian tidak ditemukan.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+                    ]])
+                )
             except Exception:
                 pass
-            await ctx.bot.send_message(
-                chat_id=q.from_user.id,
-                text="Data transaksi pembelian tidak ditemukan.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
-                ]])
-            )
             return
 
         status = topup["status"]
@@ -877,24 +877,22 @@ async def cek_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 pass
         elif status in ("expired", "cancelled"):
             status_teks = "Kadaluarsa" if status == "expired" else "Dibatalkan"
-            await ctx.bot.send_message(
-                chat_id=topup["user_id"],
-                text=(
-                    f"<b>❌ PEMBELIAN {status_teks.upper()}</b>\n\n"
-                    f"<blockquote>QR Code sudah tidak berlaku. Silakan lakukan pembelian ulang.</blockquote>"
-                ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Katalog Gmail", callback_data="beli_paket", style="primary"),
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
-                ]])
-            )
             try:
-                await q.message.delete()
+                await q.edit_message_caption(
+                    caption=(
+                        f"<b>❌ PEMBELIAN {status_teks.upper()}</b>\n\n"
+                        f"<blockquote>QR Code sudah tidak berlaku. Silakan lakukan pembelian ulang.</blockquote>"
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Katalog Gmail", callback_data="beli_paket", style="primary"),
+                        InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
+                    ]])
+                )
             except Exception:
                 pass
         else:
-            await q.answer("Pembayaran belum diterima. Silakan selesaikan pembayaran QRIS Anda.", show_alert=True)
+            await q.answer("⏳ Pembayaran belum diterima. Silakan selesaikan pembayaran QRIS Anda.", show_alert=True)
     finally:
         _pending_direct_checks.discard(order_id)
 
@@ -904,27 +902,27 @@ async def batal_direct(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     order_id = q.data.split(":", 1)[1]
 
     if order_id in _pending_direct_batal:
-        await q.answer("Proses pembatalan sedang berjalan...", show_alert=True)
+        await q.answer("⏳ Proses pembatalan sedang berjalan...", show_alert=True)
         return
     _pending_direct_batal.add(order_id)
 
+    # ✅ Jawab callback query DULUAN
+    await q.answer("❌ Membatalkan...")
+
     try:
-        await q.answer("Membatalkan...")
         await adb.update_topup_status(order_id, "cancelled")
         
-        await ctx.bot.send_message(
-            chat_id=q.from_user.id,
-            text=(
-                f"<b>❌ PEMBELIAN DIBATALKAN</b>\n\n"
-                f"<blockquote>Transaksi pembelian Anda berhasil dibatalkan.</blockquote>"
-            ),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
-            ]])
-        )
         try:
-            await q.message.delete()
+            await q.edit_message_caption(
+                caption=(
+                    f"<b>❌ PEMBELIAN DIBATALKAN</b>\n\n"
+                    f"<blockquote>Transaksi pembelian Anda berhasil dibatalkan.</blockquote>"
+                ),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
+                ]])
+            )
         except Exception:
             pass
     finally:

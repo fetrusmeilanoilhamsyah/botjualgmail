@@ -114,13 +114,16 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
     if banner_file_id and len(teks) <= 1000:
         if q:
             if q.message.photo:
-                # ✅ FAST PATH: Pesan lama sudah foto → edit caption saja (1 API call, instan!)
-                try:
-                    await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
-                    return
-                except Exception:
-                    pass
-            # Pesan lama adalah teks → hapus dan kirim foto banner
+                # Cek apakah foto lama adalah banner asli (bukan QR atau foto lain)
+                current_file_id = q.message.photo[-1].file_id
+                if current_file_id == banner_file_id:
+                    # ✅ FAST PATH: Banner → Banner — edit caption saja (1 API call, instan!)
+                    try:
+                        await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
+                        return
+                    except Exception:
+                        pass
+            # Foto lama bukan banner (QR, dll) atau pesan lama teks → hapus dan kirim banner baru
             try:
                 await q.message.delete()
             except Exception:
