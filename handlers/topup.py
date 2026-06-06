@@ -3,6 +3,8 @@ handlers/topup.py - Top Up Saldo via QRIS Pakasir
 """
 import logging
 import uuid
+import io
+import qrcode
 import aiohttp
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -41,6 +43,17 @@ def fmt_short_rupiah(n: int) -> str:
             formatted = formatted[:-2]
         return f"{formatted}K"
     return str(n)
+
+
+def generate_qr_bytes(data: str) -> io.BytesIO:
+    qr = qrcode.QRCode(box_size=8, border=2)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
 
 
 async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) -> dict | None:
@@ -257,7 +270,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         except Exception:
             readable_exp = expired_at[:16].replace("T", " ") + " WIB"
 
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={payment_number}"
+        qr_img = generate_qr_bytes(payment_number)
 
         teks = (
             f"<b>Invoice Top Up - Warung Gmail</b>\n\n"
@@ -278,7 +291,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         # Kirim foto QR terlebih dahulu sebelum menghapus pesan loading
         sent_msg = await ctx.bot.send_photo(
             chat_id=user.id,
-            photo=qr_url,
+            photo=qr_img,
             caption=teks,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(kb)
