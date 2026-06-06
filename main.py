@@ -302,6 +302,13 @@ def main():
         ])
         logger.info("✅ Bot commands berhasil diset")
 
+        # Preload banner cache
+        try:
+            from handlers.start import _load_banner_cache_on_startup
+            await _load_banner_cache_on_startup(application.bot)
+        except Exception as e:
+            logger.error("Failed to load banner cache on startup: %s", e)
+
         # Start webhook Pakasir
         loop = asyncio.get_event_loop()
         start_webhook_server_thread(
@@ -310,6 +317,7 @@ def main():
             main_loop=loop
         )
         logger.info("🔗 Webhook Pakasir aktif di port %d", WEBHOOK_PORT)
+
 
     app.post_init = post_init
 

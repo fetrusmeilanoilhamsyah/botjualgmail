@@ -3,6 +3,7 @@ handlers/start.py - Menu utama & /start
 """
 import logging
 import os
+import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
@@ -25,6 +26,17 @@ _banner_cache = {
     "mtime": None,
     "last_checked": 0
 }
+
+
+async def _load_banner_cache_on_startup(bot=None, chat_id=None):
+    """Panggil sekali di post_init"""
+    cached_file_id = await adb.get_setting("banner_file_id")
+    if cached_file_id:
+        _banner_cache["file_id"] = cached_file_id
+        _banner_cache["mtime"] = await adb.get_setting("banner_mtime")
+        _banner_cache["last_checked"] = time.time()
+        logger.info("✅ Banner cache loaded on startup: file_id=%s, mtime=%s", cached_file_id, _banner_cache["mtime"])
+
 
 async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
     """
