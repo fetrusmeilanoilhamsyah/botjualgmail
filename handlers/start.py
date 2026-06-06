@@ -51,13 +51,6 @@ async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
     import time
     now = time.time()
     
-    # ── LANGKAH 1: Answer callback query SEGERA (sebelum apapun) ──────────────
-    # Ini KRITIS: Telegram mensyaratkan q.answer() dalam 10 detik.
-    # Melakukan ini pertama menghindari "query is too old" error yang menyebabkan
-    # tampilan loading di tombol tidak berhenti.
-    if q:
-        await q.answer()
-    
     # ── LANGKAH 2: Cek banner (dengan throttling disk check 60 detik) ──────────
     # Throttle disk checks to at most once every 60 seconds
     if _banner_cache["mtime"] is not None and now - _banner_cache["last_checked"] < 60:
