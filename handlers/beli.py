@@ -324,7 +324,7 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         pembelian_id = await adb.create_pembelian(
             user_id=user.id,
-            paket_id=1,
+            paket_id=99,
             harga_bayar=total_harga,
             jumlah_akun=qty,
             stok_ids=stok_ids

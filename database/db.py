@@ -247,6 +247,12 @@ def init_db():
         if cnt == 0:
             _seed_paket_default(conn)
 
+        # Pastikan paket Custom Order (ID 99) terdaftar untuk custom buy
+        conn.execute("""
+            INSERT OR IGNORE INTO paket_gmail(id, nama, kuantitas, deskripsi, harga, aktif, urutan)
+            VALUES(99, 'Custom Order', 0, 'Pembelian Custom', 0, 0, 99)
+        """)
+
         conn.commit()
     print("✅ [botjualgmail] Database siap")
 
