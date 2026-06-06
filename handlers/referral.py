@@ -33,23 +33,20 @@ async def show_referral(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if is_ban:
         teks = (
-            "<b>Fitur Referral Dinonaktifkan</b>\n\n"
-            "Akun referral kamu telah dinonaktifkan karena terdeteksi "
-            "aktivitas mencurigakan (bot/spam).\n\n"
-            "Jika ini kesalahan, hubungi admin."
+            f"<tg-emoji emoji-id=\"6156448083916887235\">📋</tg-emoji> <b>REFERRAL DINONAKTIFKAN</b>\n\n"
+            f"<blockquote>Akun referral Anda telah dinonaktifkan karena terdeteksi aktivitas mencurigakan (bot/spam).</blockquote>\n"
+            f"Hubungi admin jika ini merupakan kesalahan."
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
     else:
         teks = (
-            "<b>Program Referral</b>\n\n"
-            f"Dapatkan <b>{fmt_rupiah(REFERRAL_BONUS)}</b> untuk setiap teman "
-            "yang mendaftar via link kamu!\n\n"
+            f"<tg-emoji emoji-id=\"6156448083916887235\">📋</tg-emoji> <b>PROGRAM REFERRAL</b>\n\n"
+            f"Dapatkan <b>{fmt_rupiah(REFERRAL_BONUS)}</b> untuk setiap teman yang mendaftar via link kamu!\n\n"
+            f"<blockquote>• Total Ref : <b>{count} Orang</b>\n"
+            f"• Saldo     : <b>{fmt_rupiah(saldo)}</b></blockquote>\n"
             f"<b>Link Referral Kamu:</b>\n"
             f"<code>{link}</code>\n\n"
-            f"<b>Statistik:</b>\n"
-            f"   Total referral: {count} orang\n"
-            f"   Saldo kamu saat ini: {fmt_rupiah(saldo)}\n\n"
-            "<i>Anti-bot aktif: jika terdeteksi spam, fitur akan dinonaktifkan otomatis.</i>"
+            f"<i>Anti-bot aktif. Penyalahgunaan sistem akan mengakibatkan pemblokiran fitur referral otomatis.</i>"
         )
         kb = [
             [InlineKeyboardButton("Bagikan Link", url=f"https://t.me/share/url?url={link}&text=Beli+Gmail+murah+disini!", style="primary")],
