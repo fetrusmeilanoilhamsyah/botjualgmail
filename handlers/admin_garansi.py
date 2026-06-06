@@ -138,7 +138,7 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await edit_menu_caption_or_text(ctx, update.effective_user.id, q.message.message_id, "Paket tidak ditemukan.", None)
         return
 
-    akun_list = await adb.ambil_stok(paket_id, paket["kuantitas"])
+    akun_list = await adb.ambil_stok(jumlah=paket["kuantitas"])
     if akun_list is None:
         from handlers.start import edit_menu_caption_or_text
         await edit_menu_caption_or_text(ctx, update.effective_user.id, q.message.message_id, "Stok habis saat proses. Coba paket lain.", None)

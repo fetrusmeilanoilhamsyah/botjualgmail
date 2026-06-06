@@ -293,7 +293,7 @@ async def eksekusi_beli_custom(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         # Ambil stok global
         from handlers.start import kirim_atau_edit_menu
-        akun_list = await adb.ambil_stok(1, qty)
+        akun_list = await adb.ambil_stok(jumlah=qty)
         if akun_list is None:
             await kirim_atau_edit_menu(
                 update, ctx,
@@ -498,7 +498,7 @@ async def eksekusi_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         # Ambil stok pooled
-        akun_list = await adb.ambil_stok(paket_id, paket["kuantitas"])
+        akun_list = await adb.ambil_stok(jumlah=paket["kuantitas"])
         if akun_list is None:
             await kirim_atau_edit_menu(
                 update, ctx,

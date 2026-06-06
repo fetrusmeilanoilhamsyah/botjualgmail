@@ -552,7 +552,7 @@ def bulk_add_stok(paket_id: int, lines: list) -> tuple[int, int]:
     return ok, dup
 
 
-def ambil_stok(paket_id: int, jumlah: int) -> list | None:
+def ambil_stok(jumlah: int, paket_id: int = None) -> list | None:
     """
     ATOMIC: Ambil N akun dari stok (secara global / pooled).
     """
