@@ -407,15 +407,34 @@ def update_topup_status(order_id: str, status: str) -> bool:
     return True
 
 
-def expire_old_topups(minutes: int = 20) -> int:
-    cutoff = (datetime.now() - timedelta(minutes=minutes)).isoformat()
-    with get_connection() as conn:
-        r = conn.execute(
-            "UPDATE topup SET status='expired' WHERE status='pending' AND created_at < ?",
-            (cutoff,)
-        )
-        conn.commit()
-        return r.rowcount
+def get_and_expire_old_pending_topups(minutes: int = 5) -> list:
+    """
+    ATOMIC: Memperbarui status topup pending yang kedaluwarsa menjadi 'expired'
+    dan mengembalikan detail baris yang di-update secara atomic menggunakan RETURNING clause (SQLite 3.35+).
+    Mencegah race condition double-notification.
+    Returns: list of dict berisi topup yang di-expire oleh query ini saja.
+    """
+    time_clause = f"-{minutes} minutes"
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """UPDATE topup
+                   SET status = 'expired'
+                   WHERE status = 'pending' AND created_at < datetime('now', 'localtime', ?)
+                   RETURNING id, user_id, order_id, jumlah, qr_chat_id, qr_message_id""",
+                (time_clause,)
+            )
+            rows = cursor.fetchall()
+            conn.commit()
+            
+            expired_list = [dict(r) for r in rows]
+            if expired_list:
+                logger.info("[DB] get_and_expire_old_pending_topups: %d topup di-expire", len(expired_list))
+            return expired_list
+    except Exception as exc:
+        logger.error("[DB] get_and_expire_old_pending_topups error: %s", exc)
+        return []
+
 
 
 def get_user_topups(user_id: int, limit: int = 10) -> list:

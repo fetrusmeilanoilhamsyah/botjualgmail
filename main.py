@@ -352,14 +352,50 @@ def main():
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         scheduler = AsyncIOScheduler(timezone="Asia/Jakarta")
 
-        # Expire topup lama setiap 5 menit
-        scheduler.add_job(
-            lambda: __import__("database.db", fromlist=["expire_old_topups"]).expire_old_topups(20),
-            "interval", minutes=5, id="expire_topups"
-        )
+        async def job_expire_pending_topups():
+            try:
+                # Expire topup yang sudah > 5 menit
+                expired_topups = await adb.get_and_expire_old_pending_topups(5)
+                if expired_topups:
+                    logger.info("[Job] expire_pending_topups: memproses %d topup kedaluwarsa", len(expired_topups))
+                    for p in expired_topups:
+                        # 1. Hapus pesan QR di Telegram
+                        qr_chat_id = p.get("qr_chat_id")
+                        qr_message_id = p.get("qr_message_id")
+                        if qr_chat_id and qr_message_id:
+                            try:
+                                await app.bot.delete_message(chat_id=qr_chat_id, message_id=qr_message_id)
+                                logger.info("[Job] Berhasil menghapus pesan QR untuk order %s", p["order_id"])
+                            except Exception as e:
+                                logger.debug("[Job] Gagal menghapus pesan QR untuk order %s: %s", p["order_id"], e)
+                        
+                        # 2. Kirim notifikasi kedaluwarsa ke user
+                        try:
+                            order_type = "Beli Gmail" if (p["order_id"].startswith("DIR-") or p["order_id"].startswith("CST-")) else "Top Up Saldo"
+                            text_msg = (
+                                f"⏰ <b>PEMBAYARAN KEDALUWARSA</b>\n\n"
+                                f"<blockquote>Batas waktu pembayaran QRIS selama 5 menit telah habis.\n"
+                                f"• Order ID  : <code>{p['order_id']}</code>\n"
+                                f"• Nominal   : <b>Rp {p['jumlah']:,}</b>\n"
+                                f"• Layanan   : <b>{order_type}</b></blockquote>\n"
+                                f"Silakan lakukan pemesanan ulang jika Anda masih ingin bertransaksi."
+                            )
+                            await app.bot.send_message(
+                                chat_id=p["user_id"],
+                                text=text_msg,
+                                parse_mode="HTML"
+                            )
+                        except Exception as e:
+                            logger.debug("[Job] Gagal mengirim notifikasi kedaluwarsa ke user %s: %s", p["user_id"], e)
+            except Exception as exc:
+                logger.error("[Job] job_expire_pending_topups error: %s", exc)
 
         async def post_init_with_scheduler(application: Application):
             await post_init(application)
+            scheduler.add_job(
+                job_expire_pending_topups,
+                "interval", minutes=1, id="expire_topups", replace_existing=True
+            )
             scheduler.start()
             logger.info("⏰ Scheduler dimulai")
 
