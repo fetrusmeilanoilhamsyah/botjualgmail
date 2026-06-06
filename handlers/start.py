@@ -237,7 +237,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("TOP UP", callback_data="topup", style="primary"),
+            InlineKeyboardButton(
+                "TOP UP",
+                callback_data="topup",
+                style="primary",
+                icon_custom_emoji_id="5364075889669718872"
+            ),
             InlineKeyboardButton(
                 "BELI AKUN",
                 callback_data="beli_paket",
