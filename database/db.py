@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "bot.db")
 
 # ─── CONNECTION POOL ──────────────────────────────────────────────────────────
-_conn_pool        = queue.Queue(maxsize=16)
+_conn_pool        = queue.Queue(maxsize=32)
 _pool_initialized = False
 _pool_lock        = threading.Lock()
 _session_cache    = {}
@@ -50,10 +50,10 @@ def init_connection_pool():
     with _pool_lock:
         if _pool_initialized:
             return
-        for _ in range(16):
+        for _ in range(32):
             _conn_pool.put(_init_connection())
         _pool_initialized = True
-        print("✅ [botjualgmail] DB connection pool ready (16 koneksi)")
+        print("✅ [botjualgmail] DB connection pool ready (32 koneksi)")
 
 
 @contextmanager
@@ -228,6 +228,8 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_user     ON transaksi(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_tipe     ON transaksi(tipe)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_beli_user    ON pembelian(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_beli_user_date ON pembelian(user_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trx_user_date  ON transaksi(user_id, created_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_order  ON topup(order_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_user   ON topup(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_topup_status ON topup(status)")
@@ -838,55 +840,100 @@ def log_broadcast(admin_id: int, pesan: str, sukses: int, gagal: int):
 # STATISTIK ADMIN
 # ═══════════════════════════════════════════════════════════════════════════════
 
+import time
+
+_admin_stats_cache = {
+    "data": None,
+    "last_updated": 0
+}
+_admin_stats_lock = threading.Lock()
+
 def get_admin_stats() -> dict:
-    with get_connection() as conn:
-        total_user   = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
-        total_saldo  = conn.execute("SELECT COALESCE(SUM(saldo),0) as s FROM users").fetchone()["s"]
-        total_trx    = conn.execute("SELECT COUNT(*) as c FROM pembelian").fetchone()["c"]
-        trx_hari_ini = conn.execute("""
-            SELECT COUNT(*) as c FROM pembelian
-            WHERE date(created_at)=date('now','localtime')
-        """).fetchone()["c"]
-        omset_total = conn.execute(
-            "SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian"
-        ).fetchone()["s"]
-        omset_hari  = conn.execute("""
-            SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian
-            WHERE date(created_at)=date('now','localtime')
-        """).fetchone()["s"]
-        garansi_pending = conn.execute(
-            "SELECT COUNT(*) as c FROM garansi WHERE status IN ('pending','diproses')"
-        ).fetchone()["c"]
-        topup_hari = conn.execute("""
-            SELECT COALESCE(SUM(jumlah),0) as s FROM topup
-            WHERE status='completed' AND date(created_at)=date('now','localtime')
-        """).fetchone()["s"]
-        stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
-    return {
-        "total_user":      total_user,
-        "total_saldo":     total_saldo,
-        "total_trx":       total_trx,
-        "trx_hari_ini":    trx_hari_ini,
-        "omset_total":     omset_total,
-        "omset_hari_ini":  omset_hari,
-        "garansi_pending": garansi_pending,
-        "topup_hari_ini":  topup_hari,
-        "stok_tersedia":   stok_tersedia,
-    }
+    now = time.time()
+    # Fast path: return cached data without acquiring lock
+    if _admin_stats_cache["data"] is not None and now - _admin_stats_cache["last_updated"] < 5:
+        return _admin_stats_cache["data"]
+
+    with _admin_stats_lock:
+        # Re-check after acquiring lock (another thread may have updated)
+        now = time.time()
+        if _admin_stats_cache["data"] is not None and now - _admin_stats_cache["last_updated"] < 5:
+            return _admin_stats_cache["data"]
+
+        with get_connection() as conn:
+            total_user   = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+            total_saldo  = conn.execute("SELECT COALESCE(SUM(saldo),0) as s FROM users").fetchone()["s"]
+            total_trx    = conn.execute("SELECT COUNT(*) as c FROM pembelian").fetchone()["c"]
+            trx_hari_ini = conn.execute("""
+                SELECT COUNT(*) as c FROM pembelian
+                WHERE date(created_at)=date('now','localtime')
+            """).fetchone()["c"]
+            omset_total = conn.execute(
+                "SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian"
+            ).fetchone()["s"]
+            omset_hari  = conn.execute("""
+                SELECT COALESCE(SUM(harga_bayar),0) as s FROM pembelian
+                WHERE date(created_at)=date('now','localtime')
+            """).fetchone()["s"]
+            garansi_pending = conn.execute(
+                "SELECT COUNT(*) as c FROM garansi WHERE status IN ('pending','diproses')"
+            ).fetchone()["c"]
+            topup_hari = conn.execute("""
+                SELECT COALESCE(SUM(jumlah),0) as s FROM topup
+                WHERE status='completed' AND date(created_at)=date('now','localtime')
+            """).fetchone()["s"]
+            stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+
+        res = {
+            "total_user":      total_user,
+            "total_saldo":     total_saldo,
+            "total_trx":       total_trx,
+            "trx_hari_ini":    trx_hari_ini,
+            "omset_total":     omset_total,
+            "omset_hari_ini":  omset_hari,
+            "garansi_pending": garansi_pending,
+            "topup_hari_ini":  topup_hari,
+            "stok_tersedia":   stok_tersedia,
+        }
+        _admin_stats_cache["data"] = res
+        _admin_stats_cache["last_updated"] = now
+        return res
 
 
+_store_stats_cache = {
+    "data": None,
+    "last_updated": 0
+}
+_store_stats_lock = threading.Lock()
 
 def get_store_stats() -> dict:
     """Ambil statistik penjualan dan stok toko untuk home menu."""
-    with get_connection() as conn:
-        stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
-        akun_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
-        total_user    = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    return {
-        "stok_tersedia": stok_tersedia,
-        "akun_terjual":  akun_terjual,
-        "total_user":    total_user
-    }
+    now = time.time()
+    # Fast path: return cached data without acquiring lock
+    if _store_stats_cache["data"] is not None and now - _store_stats_cache["last_updated"] < 15:
+        return _store_stats_cache["data"]
+
+    with _store_stats_lock:
+        # Re-check after lock (another thread may have refreshed while we waited)
+        now = time.time()
+        if _store_stats_cache["data"] is not None and now - _store_stats_cache["last_updated"] < 15:
+            return _store_stats_cache["data"]
+
+        with get_connection() as conn:
+            stok_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+            akun_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
+            total_user    = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            total_trx     = conn.execute("SELECT COUNT(*) FROM pembelian").fetchone()[0]
+
+        res = {
+            "stok_tersedia": stok_tersedia,
+            "akun_terjual":  akun_terjual,
+            "total_user":    total_user,
+            "total_trx":     total_trx
+        }
+        _store_stats_cache["data"] = res
+        _store_stats_cache["last_updated"] = now
+        return res
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -931,3 +978,44 @@ def set_setting(key: str, value: str):
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
         """, (key, str(value)))
         conn.commit()
+
+
+def rollback_stok(stok_ids: list):
+    """Rollback status terjual stok (untuk fail-safe/retry)"""
+    try:
+        with get_connection() as conn:
+            placeholders = ",".join("?" for _ in stok_ids)
+            conn.execute(
+                f"UPDATE stok_gmail SET terjual=0, terjual_at=NULL, terjual_ke=NULL WHERE id IN ({placeholders})",
+                stok_ids
+            )
+            conn.commit()
+        logger.info(f"[DB] Rolled back stock for IDs: {stok_ids}")
+        return True
+    except Exception as e:
+        logger.error(f"[DB] Rollback stock failed: {e}")
+        return False
+
+
+def get_garansi_user_id(garansi_id: int):
+    """Mendapatkan user_id dari data garansi berdasarkan id"""
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT user_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
+            return row["user_id"] if row else None
+    except Exception as e:
+        logger.error(f"[DB] get_garansi_user_id exception: {e}")
+        return None
+
+
+def get_stok_totals():
+    """Mendapatkan total stok tersedia dan terjual secara global"""
+    try:
+        with get_connection() as conn:
+            total_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
+            total_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
+            return {"tersedia": total_tersedia, "terjual": total_terjual}
+    except Exception as e:
+        logger.error(f"[DB] get_stok_totals exception: {e}")
+        return {"tersedia": 0, "terjual": 0}
+

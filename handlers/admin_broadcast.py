@@ -7,7 +7,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
-from database import db
+from database.db_async import adb
 from middleware.auth import admin_only
 from config import BROADCAST_DELAY
 
@@ -55,7 +55,7 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     db.set_session(user.id, "admin_broadcast_confirm", {"pesan": pesan, "menu_msg_id": menu_msg_id})
 
-    total_user = db.get_total_users()
+    total_user = await adb.get_total_users()
     preview = (
         f"<b>Preview Broadcast - Warung Gmail</b>\n\n"
         f"{'─'*30}\n"
@@ -65,7 +65,7 @@ async def admin_broadcast_preview(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         "Kirim broadcast sekarang?"
     )
     kb = [
-        [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="success")],
+        [InlineKeyboardButton("YA, KIRIM SEKARANG", callback_data="admin_broadcast_execute", style="primary")],
         [InlineKeyboardButton("Edit Ulang",         callback_data="admin_broadcast_reedit", style="danger")],
         [InlineKeyboardButton("Batal",              callback_data="admin_panel", style="danger")],
     ]
@@ -124,7 +124,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     menu_msg_id = session["data"].get("menu_msg_id")
     db.clear_session(user.id)
 
-    user_ids  = db.get_all_user_ids()
+    user_ids  = await adb.get_all_user_ids()
     total     = len(user_ids)
     sukses    = 0
     gagal     = 0
@@ -140,7 +140,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
             logger.debug("[broadcast] Gagal ke %d: %s", uid, e)
         await asyncio.sleep(BROADCAST_DELAY)
 
-    db.log_broadcast(user.id, pesan, sukses, gagal)
+    await adb.log_broadcast(user.id, pesan, sukses, gagal)
 
     teks_selesai = (
         f"<b>Broadcast Selesai!</b>\n\n"
@@ -148,7 +148,7 @@ async def admin_broadcast_execute(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         f"• Gagal: {gagal} user\n"
         f"• Total: {total} user"
     )
-    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="success")]]
+    kb = [[InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="primary")]]
 
     if menu_msg_id:
         try:

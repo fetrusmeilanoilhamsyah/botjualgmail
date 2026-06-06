@@ -7,13 +7,14 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
 from database import db
+from database.db_async import adb
 from middleware.auth import admin_only
 
 logger = logging.getLogger(__name__)
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 def fmt_short_rupiah(n: int) -> str:
@@ -41,10 +42,10 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    with db.get_connection() as conn:
-        total_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
-        total_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
-    harga_satuan = db.get_harga_satuan()
+    stok_totals = await adb.get_stok_totals()
+    total_tersedia = stok_totals["tersedia"]
+    total_terjual  = stok_totals["terjual"]
+    harga_satuan = await adb.get_harga_satuan()
 
     teks = (
         "<b>Kelola Stok Gmail (Database Umum)</b>\n\n"
@@ -54,22 +55,26 @@ async def cmd_stok(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
     kb = [
-        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="success")],
-        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="success")],
-        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="success")],
-        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="success")],
+        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
+        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="primary")],
+        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="primary")],
+        [
+            InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary"),
+            InlineKeyboardButton("Kembali", callback_data="admin_panel", style="danger")
+        ],
     ]
-    await ctx.bot.send_message(chat_id=update.effective_user.id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
 async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer("Di-refresh")
-    with db.get_connection() as conn:
-        total_tersedia = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
-        total_terjual  = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=1").fetchone()[0]
-    harga_satuan = db.get_harga_satuan()
+    stok_totals = await adb.get_stok_totals()
+    total_tersedia = stok_totals["tersedia"]
+    total_terjual  = stok_totals["terjual"]
+    harga_satuan = await adb.get_harga_satuan()
 
     teks = (
         "<b>Kelola Stok Gmail (Database Umum)</b>\n\n"
@@ -78,17 +83,21 @@ async def admin_stok_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"• Harga Satuan   : <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n"
     )
     kb = [
-        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="success")],
-        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="success")],
-        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="success")],
-        [InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="success")],
+        [InlineKeyboardButton("Tambah Stok (Upload .txt)", callback_data="admin_upload_stok", style="primary")],
+        [InlineKeyboardButton("Input Manual 1 Akun", callback_data="admin_input_manual", style="primary")],
+        [InlineKeyboardButton("Kelola Paket & Harga", callback_data="admin_paket", style="primary")],
+        [
+            InlineKeyboardButton("Refresh", callback_data="admin_stok_refresh", style="primary"),
+            InlineKeyboardButton("Kembali", callback_data="admin_panel", style="danger")
+        ],
     ]
     import telegram
     try:
         from datetime import datetime
         now_str = datetime.now().strftime("%H:%M:%S")
         teks_update = f"{teks}\n<i>Terakhir di-refresh: {now_str}</i>"
-        await q.edit_message_text(teks_update, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+        from handlers.start import kirim_atau_edit_menu
+        await kirim_atau_edit_menu(update, ctx, teks_update, InlineKeyboardMarkup(kb))
     except telegram.error.BadRequest as e:
         if "Message is not modified" not in str(e):
             raise
@@ -112,7 +121,8 @@ async def admin_upload_stok_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         "Silakan kirimkan file .txt Anda sekarang."
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -144,7 +154,8 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         kb = [[InlineKeyboardButton("Kembali", callback_data="admin_stok_refresh", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
@@ -154,7 +165,8 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     msg = None
     if menu_msg_id:
         try:
-            msg = await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text="Memproses file...")
+            from handlers.start import edit_menu_caption_or_text
+            msg = await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, "Memproses file...", None)
         except Exception:
             pass
     if not msg:
@@ -164,7 +176,7 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     content = await tg_file.download_as_bytearray()
     lines   = content.decode("utf-8", errors="ignore").splitlines()
 
-    ok, dup = db.bulk_add_stok(paket_id, lines)
+    ok, dup = await adb.bulk_add_stok(paket_id, lines)
 
     teks_res = (
         f"Stok berhasil ditambahkan!\n\n"
@@ -173,10 +185,11 @@ async def admin_terima_stok_file(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         f"Total diproses: {len(lines)} baris"
     )
     kb = [[
-        InlineKeyboardButton("Lihat Stok", callback_data="admin_stok_refresh", style="success"),
+        InlineKeyboardButton("Lihat Stok", callback_data="admin_stok_refresh", style="primary"),
         InlineKeyboardButton("Panel", callback_data="admin_panel", style="danger"),
     ]]
-    await msg.edit_text(teks_res, reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import edit_menu_caption_or_text
+    await edit_menu_caption_or_text(ctx, user.id, msg.message_id if hasattr(msg, "message_id") else menu_msg_id, teks_res, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -195,7 +208,8 @@ async def admin_input_manual_start(update: Update, ctx: ContextTypes.DEFAULT_TYP
         "Ketik detail akun sekarang:"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="admin_stok_refresh", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -226,7 +240,8 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
         kb = [[InlineKeyboardButton("Kembali", callback_data="admin_stok_refresh", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
@@ -244,29 +259,32 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
         kb = [[InlineKeyboardButton("Kembali", callback_data="admin_stok_refresh", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    success = db.add_stok_gmail(paket_id, email, password, recovery, tgl_buat, catatan)
+    success = await adb.add_stok_gmail(paket_id, email, password, recovery, tgl_buat, catatan)
 
     if success:
-        stok_now = db.get_stok_count()
+        stok_now = await adb.get_stok_count()
         teks_res = (
             f"Akun berhasil ditambahkan!\n\n"
             f"Email: {email}\n"
             f"Total stok tersedia: {stok_now} akun"
         )
         kb = [[
-            InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="success"),
-            InlineKeyboardButton("Panel", callback_data="admin_panel", style="danger"),
+            InlineKeyboardButton("Tambah Lagi", callback_data="admin_input_manual", style="primary"),
+            InlineKeyboardButton("Kelola Stok", callback_data="admin_stok_refresh", style="danger"),
+            InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger"),
         ]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_res, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
@@ -276,7 +294,8 @@ async def admin_terima_manual_akun(update: Update, ctx: ContextTypes.DEFAULT_TYP
         kb = [[InlineKeyboardButton("Kembali", callback_data="admin_stok_refresh", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_res, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
@@ -290,8 +309,8 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
-    harga_satuan = db.get_harga_satuan()
-    paket_list = db.get_all_paket()
+    harga_satuan = await adb.get_harga_satuan()
+    paket_list = await adb.get_all_paket()
     teks = (
         "Kelola Paket & Harga\n\n"
         f"Harga Satuan Saat Ini: <b>{fmt_rupiah(harga_satuan)} / Gmail</b>\n\n"
@@ -303,11 +322,15 @@ async def admin_paket_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         teks += f"\n{aktif} #{p['id']} {p['nama']} - {fmt_short_rupiah(p['harga'])} | stok: {p['stok_tersedia']}"
 
     kb = [
-        [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="success")],
-        [InlineKeyboardButton("Toggle Status Paket", callback_data="admin_toggle_paket_list", style="success")],
-        [InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")]
+        [InlineKeyboardButton("Edit Harga Satuan", callback_data="admin_edit_harga_satuan", style="primary")],
+        [InlineKeyboardButton("Toggle Status Paket", callback_data="admin_toggle_paket_list", style="primary")],
+        [
+            InlineKeyboardButton("Kembali ke Stok", callback_data="admin_stok_refresh", style="danger"),
+            InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")
+        ]
     ]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -315,11 +338,13 @@ async def admin_edit_harga_satuan_start(update: Update, ctx: ContextTypes.DEFAUL
     q = update.callback_query
     await q.answer()
     db.set_session(update.effective_user.id, "admin_edit_harga_satuan", {"menu_msg_id": q.message.message_id})
-    await q.edit_message_text(
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(
+        update, ctx,
         "Edit Harga Satuan Gmail\n\n"
-        f"Harga saat ini: {fmt_rupiah(db.get_harga_satuan())}\n\n"
+        f"Harga saat ini: {fmt_rupiah(await adb.get_harga_satuan())}\n\n"
         "Ketik harga baru per 1 Gmail (angka saja, contoh: 4500):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_paket", style="danger")]])
+        InlineKeyboardMarkup([[InlineKeyboardButton("Batal", callback_data="admin_paket", style="danger")]])
     )
 
 
@@ -349,23 +374,25 @@ async def admin_terima_harga_satuan_baru(update: Update, ctx: ContextTypes.DEFAU
         kb = [[InlineKeyboardButton("Batal", callback_data="admin_paket", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
                 return
             except Exception:
                 pass
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    db.update_harga_satuan(harga)
+    await adb.update_harga_satuan(harga)
     teks_res = (
         "Harga satuan berhasil diperbarui!\n\n"
         f"Harga Baru: {fmt_rupiah(harga)} / Gmail\n"
         "Harga seluruh paket otomatis diperbarui."
     )
-    kb = [[InlineKeyboardButton("Kembali", callback_data="admin_paket", style="success")]]
+    kb = [[InlineKeyboardButton("Kembali", callback_data="admin_paket", style="danger")]]
     if menu_msg_id:
         try:
-            await ctx.bot.edit_message_text(chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
+            from handlers.start import edit_menu_caption_or_text
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_res, InlineKeyboardMarkup(kb))
             return
         except Exception:
             pass
@@ -377,15 +404,16 @@ async def admin_toggle_paket_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     q = update.callback_query
     await q.answer()
 
-    paket_list = db.get_all_paket()
+    paket_list = await adb.get_all_paket()
     teks = "Pilih paket untuk mengubah status aktif/nonaktif:"
     kb = []
     for p in paket_list:
         status = "Aktif" if p["aktif"] else "Nonaktif"
         label = f"#{p['id']} {p['nama']} ({status})"
-        kb.append([InlineKeyboardButton(label, callback_data=f"admin_toggle_paket:{p['id']}", style="success")])
+        kb.append([InlineKeyboardButton(label, callback_data=f"admin_toggle_paket:{p['id']}", style="primary")])
     kb.append([InlineKeyboardButton("Kembali", callback_data="admin_paket", style="danger")])
-    await q.edit_message_text(teks, reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -394,8 +422,8 @@ async def admin_toggle_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     paket_id = int(q.data.split(":", 1)[1])
     await q.answer()
 
-    db.toggle_paket_aktif(paket_id)
-    paket = db.get_paket_by_id(paket_id)
+    await adb.toggle_paket_aktif(paket_id)
+    paket = await adb.get_paket_by_id(paket_id)
     status = "AKTIF" if paket["aktif"] else "NONAKTIF"
     await q.answer(f"Paket {paket['nama']} -> {status}", show_alert=True)
     await admin_toggle_paket_list(update, ctx)

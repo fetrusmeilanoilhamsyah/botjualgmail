@@ -13,18 +13,26 @@ from datetime import datetime
 from telegram import BotCommand
 from telegram.ext import Application, ApplicationBuilder, Defaults
 
-# ── Monkeypatch InlineKeyboardButton untuk mendukung warna/style (telelokal) ──
-import telegram
-class StyledInlineKeyboardButton(telegram.InlineKeyboardButton):
-    __slots__ = ("style", "icon_custom_emoji_id")
-    def __init__(self, text, style=None, icon_custom_emoji_id=None, **kwargs):
-        super().__init__(text=text, **kwargs)
-        self._frozen = False
-        self.style = style
-        self.icon_custom_emoji_id = icon_custom_emoji_id
-        self._frozen = True
+# Monkeypatching removed since native telegram v22.7 supports styles directly.
 
-telegram.InlineKeyboardButton = StyledInlineKeyboardButton
+# ── Patch CallbackQuery.answer to prevent duplicate network calls ──
+import telegram
+original_answer = telegram.CallbackQuery.answer
+_answered_queries = set()
+async def patched_answer(self, *args, **kwargs):
+    if self.id in _answered_queries:
+        return
+    _answered_queries.add(self.id)
+    if len(_answered_queries) > 5000:
+        _answered_queries.clear()
+    try:
+        return await original_answer(self, *args, **kwargs)
+    except Exception as e:
+        # Catch and ignore errors if already answered or expired
+        if "query is old" not in str(e).lower() and "already answered" not in str(e).lower():
+            logger = logging.getLogger(__name__)
+            logger.debug("CallbackQuery.answer error: %s", e)
+telegram.CallbackQuery.answer = patched_answer
 
 # ── Logging Setup ──────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -67,14 +75,28 @@ def main():
 
     # Gunakan telelokal jika diaktifkan (share dengan botcv, tidak mengganggu)
     if USE_LOCAL_BOT_API:
-        local_url      = f"http://localhost:{LOCAL_BOT_API_PORT}/bot"
-        local_file_url = f"http://localhost:{LOCAL_BOT_API_PORT}/file/bot"
-        builder = builder.base_url(local_url).base_file_url(local_file_url)
+        local_url      = f"http://127.0.0.1:{LOCAL_BOT_API_PORT}/bot"
+        local_file_url = f"http://127.0.0.1:{LOCAL_BOT_API_PORT}/file/bot"
+        builder = (
+            builder.base_url(local_url)
+            .base_file_url(local_file_url)
+            .local_mode(True)
+        )
         logger.info("🔌 Telelokal aktif: %s", local_url)
     else:
         logger.info("🌐 Menggunakan Telegram API resmi")
 
-    app: Application = builder.build()
+    # Set up high concurrency parameters matching botcv's performance
+    app: Application = (
+        builder
+        .concurrent_updates(128)
+        .connection_pool_size(128)
+        .pool_timeout(30)
+        .read_timeout(20)
+        .write_timeout(20)
+        .connect_timeout(10)
+        .build()
+    )
 
     # ── Register Handlers ──────────────────────────────────────────────────────
     logger.info("📋 Meregistrasi handlers...")
@@ -114,18 +136,19 @@ def main():
     # ── Admin Broadcast Start dari Panel ──────────────────────────────────────
     from telegram.ext import CallbackQueryHandler
     from database import db
+    from database.db_async import adb
     from middleware.auth import admin_only
 
     @admin_only
     async def admin_broadcast_start_cb(update, ctx):
-        from handlers.admin_broadcast import cmd_broadcast_start
         q = update.callback_query
         await q.answer()
-        db.set_session(update.effective_user.id, "admin_broadcast_preview", {})
-        await q.edit_message_text(
+        db.set_session(update.effective_user.id, "admin_broadcast_preview", {"menu_msg_id": q.message.message_id})
+        from handlers.start import kirim_atau_edit_menu
+        await kirim_atau_edit_menu(
+            update, ctx,
             "Broadcast Pesan\n\nKetik pesan yang ingin dikirim ke semua user.\nMendukung HTML format.",
-            parse_mode="HTML",
-            reply_markup=__import__("telegram").InlineKeyboardMarkup([[
+            __import__("telegram").InlineKeyboardMarkup([[
                 __import__("telegram").InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
             ]])
         )
@@ -139,12 +162,13 @@ def main():
         q = update.callback_query
         await q.answer()
         db.set_session(update.effective_user.id, "admin_isi_saldo", {"menu_msg_id": q.message.message_id})
-        await q.edit_message_text(
+        from handlers.start import kirim_atau_edit_menu
+        await kirim_atau_edit_menu(
+            update, ctx,
             "<b>Isi Saldo User - Warung Gmail</b>\n\n"
             "Format: <code>USER_ID JUMLAH KETERANGAN</code>\n\n"
             "Contoh: <code>1234567 50000 Bonus admin</code>",
-            parse_mode="HTML",
-            reply_markup=__import__("telegram").InlineKeyboardMarkup([[
+            __import__("telegram").InlineKeyboardMarkup([[
                 __import__("telegram").InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")
             ]])
         )
@@ -178,16 +202,15 @@ def main():
             kb = [[InlineKeyboardButton("Batal", callback_data="admin_panel", style="danger")]]
             if menu_msg_id:
                 try:
-                    await ctx.bot.edit_message_text(
-                        chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-                    )
+                    from handlers.start import edit_menu_caption_or_text
+                    await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb))
                     return
                 except Exception:
                     pass
             await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
             return
 
-        result = db.tambah_saldo(uid, jml, "manual", ket, ref_id=f"admin_{user.id}")
+        result = await adb.tambah_saldo(uid, jml, "manual", ket, ref_id=f"admin_{user.id}")
         teks_res = (
             f"Saldo berhasil ditambahkan!\n\n"
             f"User ID: {uid}\n"
@@ -198,9 +221,8 @@ def main():
 
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb)
-                )
+                from handlers.start import edit_menu_caption_or_text
+                await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_res, InlineKeyboardMarkup(kb))
             except Exception:
                 await ctx.bot.send_message(chat_id=user.id, text=teks_res, reply_markup=InlineKeyboardMarkup(kb))
         else:
@@ -303,6 +325,18 @@ def main():
         )
 
         async def post_init_with_scheduler(application: Application):
+            try:
+                import asyncio
+                from concurrent.futures import ThreadPoolExecutor
+                import atexit
+                loop = asyncio.get_running_loop()
+                executor = ThreadPoolExecutor(max_workers=64, thread_name_prefix="asyncio-worker-gmail")
+                loop.set_default_executor(executor)
+                atexit.register(executor.shutdown, wait=False)
+                logger.info("✅ Event loop default executor configured with 64 threads")
+            except Exception as e:
+                logger.error("Failed to set default executor: %s", e)
+
             await post_init(application)
             scheduler.start()
             logger.info("⏰ Scheduler dimulai")

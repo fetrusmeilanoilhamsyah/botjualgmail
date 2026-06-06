@@ -9,6 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
+from database.db_async import adb
 from config import (
     PAKASIR_ENABLED, PAKASIR_SLUG, PAKASIR_API_KEY,
     PAKASIR_SANDBOX, TOPUP_MIN, TOPUP_MAX, ADMIN_CONTACT
@@ -22,7 +23,7 @@ _pending_batal = set()
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 def fmt_short_rupiah(n: int) -> str:
@@ -64,6 +65,12 @@ def _buat_order_pakasir(order_id: str, amount: int, user_id: int) -> dict | None
         return None
 
 
+async def _buat_order_pakasir_async(order_id: str, amount: int, user_id: int) -> dict | None:
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _buat_order_pakasir, order_id, amount, user_id)
+
+
 def _cek_status_pakasir(order_id: str, amount: int) -> dict | None:
     if not PAKASIR_ENABLED or not PAKASIR_API_KEY:
         return None
@@ -85,6 +92,12 @@ def _cek_status_pakasir(order_id: str, amount: int) -> dict | None:
         return None
 
 
+async def _cek_status_pakasir_async(order_id: str, amount: int) -> dict | None:
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _cek_status_pakasir, order_id, amount)
+
+
 async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -97,31 +110,27 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     kb = [
         [
-            InlineKeyboardButton("1K", callback_data="topup_nominal:1000", style="success"),
-            InlineKeyboardButton("5K", callback_data="topup_nominal:5000", style="success"),
+            InlineKeyboardButton("1K", callback_data="topup_nominal:1000", style="primary"),
+            InlineKeyboardButton("5K", callback_data="topup_nominal:5000", style="primary"),
+            InlineKeyboardButton("10K", callback_data="topup_nominal:10000", style="primary"),
         ],
         [
-            InlineKeyboardButton("10K", callback_data="topup_nominal:10000", style="success"),
-            InlineKeyboardButton("15K", callback_data="topup_nominal:15000", style="success"),
+            InlineKeyboardButton("15K", callback_data="topup_nominal:15000", style="primary"),
+            InlineKeyboardButton("20K", callback_data="topup_nominal:20000", style="primary"),
+            InlineKeyboardButton("25K", callback_data="topup_nominal:25000", style="primary"),
         ],
         [
-            InlineKeyboardButton("20K", callback_data="topup_nominal:20000", style="success"),
-            InlineKeyboardButton("25K", callback_data="topup_nominal:25000", style="success"),
+            InlineKeyboardButton("30K", callback_data="topup_nominal:30000", style="primary"),
+            InlineKeyboardButton("50K", callback_data="topup_nominal:50000", style="primary"),
+            InlineKeyboardButton("100K", callback_data="topup_nominal:100000", style="primary"),
         ],
         [
-            InlineKeyboardButton("30K", callback_data="topup_nominal:30000", style="success"),
-            InlineKeyboardButton("50K", callback_data="topup_nominal:50000", style="success"),
+            InlineKeyboardButton("200K", callback_data="topup_nominal:200000", style="primary"),
+            InlineKeyboardButton("500K", callback_data="topup_nominal:500000", style="primary"),
+            InlineKeyboardButton("1 Juta", callback_data="topup_nominal:1000000", style="primary"),
         ],
         [
-            InlineKeyboardButton("100K", callback_data="topup_nominal:100000", style="success"),
-            InlineKeyboardButton("200K", callback_data="topup_nominal:200000", style="success"),
-        ],
-        [
-            InlineKeyboardButton("500K", callback_data="topup_nominal:500000", style="success"),
-            InlineKeyboardButton("1 Juta", callback_data="topup_nominal:1000000", style="success"),
-        ],
-        [
-            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="success"),
+            InlineKeyboardButton("Nominal Manual", callback_data="topup_manual", style="primary"),
             InlineKeyboardButton("Batal", callback_data="menu_utama", style="danger")
         ]
     ]
@@ -233,12 +242,16 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
 
     # Buat order Pakasir
     if PAKASIR_ENABLED:
-        order_data = _buat_order_pakasir(order_id, amount, user.id)
+        order_data = await _buat_order_pakasir_async(order_id, amount, user.id)
     else:
         order_data = None
 
     if PAKASIR_ENABLED and order_data is None:
-        await msg.edit_text("Gagal membuat QR Code. Silakan coba beberapa saat lagi atau hubungi admin.")
+        await edit_menu_caption_or_text(
+            ctx, user.id, msg.message_id,
+            "Gagal membuat QR Code. Silakan coba beberapa saat lagi atau hubungi admin.",
+            None
+        )
         return
 
     if PAKASIR_ENABLED and order_data:
@@ -267,7 +280,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         )
         kb = [
             [
-                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="success"),
+                InlineKeyboardButton("Cek Status Bayar", callback_data=f"cek_topup:{order_id}", style="primary"),
                 InlineKeyboardButton("Batalkan", callback_data=f"batal_topup:{order_id}", style="danger")
             ]
         ]
@@ -287,7 +300,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
             pass
 
         # Simpan ke DB dengan ID pesan yang baru
-        db.create_topup(
+        await adb.create_topup(
             user_id=user.id,
             order_id=order_id,
             jumlah=amount,
@@ -306,7 +319,7 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         
         # Simpan ke DB
-        db.create_topup(
+        await adb.create_topup(
             user_id=user.id,
             order_id=order_id,
             jumlah=amount,
@@ -330,7 +343,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         await q.answer("Memeriksa status...")
 
-        topup = db.get_topup(order_id)
+        topup = await adb.get_topup(order_id)
         if not topup:
             try:
                 await q.message.delete()
@@ -348,36 +361,39 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         status = topup["status"]
 
         if status == "pending":
-            txn = _cek_status_pakasir(order_id, topup["jumlah"])
+            txn = await _cek_status_pakasir_async(order_id, topup["jumlah"])
             if txn and txn.get("status") == "completed":
-                was_updated = db.complete_topup_if_pending(order_id)
+                was_updated = await adb.complete_topup_if_pending(order_id)
                 if was_updated:
-                    result = db.tambah_saldo(topup["user_id"], topup["jumlah"], "topup", "Top up via QRIS", ref_id=order_id)
+                    result = await adb.tambah_saldo(topup["user_id"], topup["jumlah"], "topup", "Top up via QRIS", ref_id=order_id)
                     status = "completed"
                     
-                    # Kirim ke live transaction feed (tanpa emoji, nama & ID disensor)
+                    # Kirim ke live transaction feed
                     try:
                         from handlers.live_tx import send_live_tx, censor_name, censor_id
-                        u = db.get_user(topup["user_id"])
+                        from config import BOT_USERNAME
+                        u = await adb.get_user(topup["user_id"])
                         c_name = censor_name(u["full_name"] if u else "Pengguna")
                         c_uid = censor_id(topup["user_id"])
                         
                         live_teks = (
-                            "LIVE TOP UP\n\n"
-                            f"Nominal: {fmt_short_rupiah(topup['jumlah'])} ({fmt_rupiah(topup['jumlah'])})\n"
-                            f"Metode: QRIS Otomatis\n"
-                            f"User: {c_name} [{c_uid}]\n"
-                            "Status: Sukses"
+                            f"<b>#{order_id} Top Up Completed</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"👤 <b>User</b>: {c_name} [<code>{c_uid}</code>]\n"
+                            f"💰 <b>Nominal</b>: {fmt_short_rupiah(topup['jumlah'])} ({fmt_rupiah(topup['jumlah'])})\n"
+                            f"🗂️ <b>Metode</b>: QRIS Otomatis\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"➡️ Top Up Saldo @{BOT_USERNAME}"
                         )
                         await send_live_tx(ctx.bot, live_teks)
                     except Exception as e:
                         logger.warning("[topup] Gagal kirim live tx: %s", e)
             elif txn and txn.get("status") in ("expired", "cancelled"):
                 status = txn.get("status")
-                db.update_topup_status(order_id, status)
+                await adb.update_topup_status(order_id, status)
 
         if status == "completed":
-            saldo = db.get_saldo(topup["user_id"])
+            saldo = await adb.get_saldo(topup["user_id"])
             
             # Kirim pesan notifikasi sukses terlebih dahulu
             await ctx.bot.send_message(
@@ -389,7 +405,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")
+                    InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
                 ]])
             )
             try:
@@ -406,7 +422,7 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 text=f"<b>Pembayaran {status_teks}</b>\n\nQR Code sudah tidak berlaku. Silakan ajukan top up baru.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="success"),
+                    InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
                     InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
                 ]])
             )
@@ -432,7 +448,7 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     try:
         await q.answer("Membatalkan...")
-        db.update_topup_status(order_id, "cancelled")
+        await adb.update_topup_status(order_id, "cancelled")
         
         # Kirim pesan konfirmasi batal terlebih dahulu
         await ctx.bot.send_message(
@@ -440,7 +456,7 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             text="<b>Top Up Dibatalkan</b>\n\nTransaksi top up Anda berhasil dibatalkan.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")
+                InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
         try:

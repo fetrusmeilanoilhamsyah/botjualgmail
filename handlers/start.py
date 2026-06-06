@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
 from database import db
+from database.db_async import adb
 from config import ADMIN_IDS, ADMIN_CONTACT, CHANNEL_LIVE_TX
 
 logger = logging.getLogger(__name__)
@@ -16,97 +17,135 @@ BANNER_PATH = "BANNERBOTGMAIL.png"
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
+
+_banner_cache = {
+    "file_id": None,
+    "mtime": None,
+    "last_checked": 0
+}
 
 async def kirim_atau_edit_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE, teks: str, markup: InlineKeyboardMarkup):
     """
     Helper untuk mengirim atau mengedit menu dengan menyertakan banner.
-    Jika banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel).
+    Jika banner ada, akan dikirim/di-edit sebagai foto (banner tetap nempel!).
     Jika banner tidak ada, fallback ke teks biasa.
     """
     user = update.effective_user
     q = update.callback_query
     
-    banner_file_id = None
-    if os.path.exists(BANNER_PATH):
+    import time
+    now = time.time()
+    
+    # ── LANGKAH 1: Answer callback query SEGERA (sebelum apapun) ──────────────
+    # Ini KRITIS: Telegram mensyaratkan q.answer() dalam 10 detik.
+    # Melakukan ini pertama menghindari "query is too old" error yang menyebabkan
+    # tampilan loading di tombol tidak berhenti.
+    if q:
+        await q.answer()
+    
+    # ── LANGKAH 2: Cek banner (dengan throttling disk check 60 detik) ──────────
+    # Throttle disk checks to at most once every 60 seconds
+    if _banner_cache["mtime"] is not None and now - _banner_cache["last_checked"] < 60:
+        current_mtime = _banner_cache["mtime"]
+    else:
         try:
-            current_mtime = str(int(os.path.getmtime(BANNER_PATH)))
+            current_mtime = str(int(os.path.getmtime(BANNER_PATH))) if os.path.exists(BANNER_PATH) else ""
         except Exception:
             current_mtime = ""
-            
-        cached_file_id = db.get_setting("banner_file_id")
-        cached_mtime = db.get_setting("banner_mtime")
-        
-        if cached_file_id and cached_mtime == current_mtime:
-            banner_file_id = cached_file_id
-        else:
-            # Upload pertama kali langsung sebagai menu
-            try:
-                logger.info("Uploading banner as menu...")
-                with open(BANNER_PATH, "rb") as f:
-                    if q:
-                        try:
-                            await q.message.delete()
-                        except Exception:
-                            pass
-                        sent = await ctx.bot.send_photo(
-                            chat_id=user.id,
-                            photo=f,
-                            caption=teks,
-                            parse_mode="HTML",
-                            reply_markup=markup
-                        )
-                    else:
-                        sent = await update.message.reply_photo(
-                            photo=f,
-                            caption=teks,
-                            parse_mode="HTML",
-                            reply_markup=markup
-                        )
-                banner_file_id = sent.photo[-1].file_id
-                db.set_setting("banner_file_id", banner_file_id)
-                db.set_setting("banner_mtime", current_mtime)
-                return
-            except Exception as e:
-                logger.error("Failed to upload banner: %s", e)
-                banner_file_id = None
+        _banner_cache["last_checked"] = now
 
+    if _banner_cache["file_id"] is not None and _banner_cache["mtime"] == current_mtime:
+        banner_file_id = _banner_cache["file_id"]
+    else:
+        banner_file_id = None
+        if current_mtime:
+            cached_file_id = await adb.get_setting("banner_file_id")
+            cached_mtime = await adb.get_setting("banner_mtime")
+            
+            if cached_file_id and cached_mtime == current_mtime:
+                banner_file_id = cached_file_id
+                _banner_cache["file_id"] = banner_file_id
+                _banner_cache["mtime"] = current_mtime
+                _banner_cache["last_checked"] = now
+            else:
+                # Upload banner pertama kali
+                try:
+                    logger.info("Uploading banner as menu...")
+                    with open(BANNER_PATH, "rb") as f:
+                        if q:
+                            try:
+                                await q.message.delete()
+                            except Exception:
+                                pass
+                            sent = await ctx.bot.send_photo(
+                                chat_id=user.id,
+                                photo=f,
+                                caption=teks,
+                                parse_mode="HTML",
+                                reply_markup=markup
+                            )
+                        else:
+                            sent = await update.message.reply_photo(
+                                photo=f,
+                                caption=teks,
+                                parse_mode="HTML",
+                                reply_markup=markup
+                            )
+                    banner_file_id = sent.photo[-1].file_id
+                    await adb.set_setting("banner_file_id", banner_file_id)
+                    await adb.set_setting("banner_mtime", current_mtime)
+                    _banner_cache["file_id"] = banner_file_id
+                    _banner_cache["mtime"] = current_mtime
+                    _banner_cache["last_checked"] = now
+                    return
+                except Exception as e:
+                    logger.error("Failed to upload banner: %s", e)
+                    banner_file_id = None
+        else:
+            _banner_cache["file_id"] = None
+            _banner_cache["mtime"] = None
+            _banner_cache["last_checked"] = now
+
+    # ── LANGKAH 3: Kirim/Edit pesan menu ──────────────────────────────────────
     if banner_file_id and len(teks) <= 1000:
         if q:
-            await q.answer()
             if q.message.photo:
-                # Edit caption secara inline (sangat cepat, banner tetap nempel!)
+                # FAST PATH: Pesan lama sudah foto → edit caption saja (1 API call, sangat cepat!)
                 try:
                     await q.edit_message_caption(caption=teks, parse_mode="HTML", reply_markup=markup)
-                except Exception:
-                    # Fallback jika gagal edit
-                    try:
-                        await q.message.delete()
-                    except Exception:
-                        pass
-                    await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
-            else:
-                # Pesan lama adalah teks, hapus dan kirim foto banner baru
-                try:
-                    await q.message.delete()
+                    return
                 except Exception:
                     pass
-                await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
+            # Pesan lama adalah teks → hapus dan kirim foto banner
+            # (Tidak bisa mengubah teks menjadi foto via edit, jadi perlu delete+send)
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+            await ctx.bot.send_photo(
+                chat_id=user.id,
+                photo=banner_file_id,
+                caption=teks,
+                parse_mode="HTML",
+                reply_markup=markup
+            )
         else:
             # Command /start atau input non-callback
             await ctx.bot.send_photo(chat_id=user.id, photo=banner_file_id, caption=teks, parse_mode="HTML", reply_markup=markup)
     else:
-        # Fallback teks biasa jika banner tidak ada
+        # Fallback: tidak ada banner atau teks > 1000 karakter
         if q:
-            await q.answer()
             if q.message.photo:
+                # Pesan lama adalah foto, hapus dan kirim teks
                 try:
                     await q.message.delete()
                 except Exception:
                     pass
                 await ctx.bot.send_message(chat_id=user.id, text=teks, parse_mode="HTML", reply_markup=markup)
             else:
+                # Pesan lama sudah teks → edit langsung (1 API call!)
                 try:
                     await q.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
                 except Exception:
@@ -152,74 +191,58 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user  = update.effective_user
     query = update.callback_query
 
-    # Referral dari deep link: /start ref_12345
-    if ctx.args and ctx.args[0].startswith("ref_") and not query:
-        ref_id_str = ctx.args[0][4:]
-        try:
-            referrer_id = int(ref_id_str)
-            db.upsert_user(user.id, user.username or "", user.full_name or "")
-            if db.set_referral(user.id, referrer_id):
-                # Referral valid → bonus ke referrer (anti spam dicek di sini)
-                await _proses_referral_bonus(ctx, referrer_id, user)
-        except (ValueError, Exception) as e:
-            logger.warning("[start] referral error: %s", e)
+    if query:
+        await query.answer()
 
-    db.upsert_user(user.id, user.username or "", user.full_name or "")
+    # Only register/update user profile on fresh command inputs (e.g. /start command)
+    # Skipping this on callback queries avoids redundant database writes on every main menu navigation.
+    if not query:
+        await adb.upsert_user(user.id, user.username or "", user.full_name or "")
+        
+        # Referral dari deep link: /start ref_12345
+        if ctx.args and ctx.args[0].startswith("ref_"):
+            ref_id_str = ctx.args[0][4:]
+            try:
+                referrer_id = int(ref_id_str)
+                if await adb.set_referral(user.id, referrer_id):
+                    # Referral valid → bonus ke referrer (anti-spam dicek di sini)
+                    await _proses_referral_bonus(ctx, referrer_id, user)
+            except (ValueError, Exception) as e:
+                logger.warning("[start] referral error: %s", e)
     
-    user_data = db.get_user(user.id)
+    user_data = await adb.get_user(user.id)
     saldo     = user_data["saldo"] if user_data else 0
-    stats     = db.get_store_stats()
+    stats     = await adb.get_store_stats()
 
     is_admin = user.id in ADMIN_IDS
-
     teks = (
-        f"               <b>« WARUNG GMAIL »</b>\n\n"
-        f"Halo <b>{user.first_name}</b>! Selamat datang di Warung Gmail.\n"
-        f"Penyedia akun Gmail berkualitas, fresh, dan bergaransi 24 jam.\n\n"
-        f"<b>STATISTIK TOKO</b>\n"
-        f"• Akun Terjual : <b>{stats['akun_terjual']:,} Akun</b>\n"
-        f"• Stok Tersedia: <b>{stats['stok_tersedia']:,} Akun</b>\n"
-        f"• Total User   : <b>{stats['total_user']:,} Pengguna</b>\n\n"
-        f"<b>SALDO KAMU</b>\n"
-        f"• Saldo: <b>{fmt_rupiah(saldo)}</b>\n\n"
+        f"<b>WARUNG GMAIL</b>\n\n"
+        f"Saldo Anda: <b>{fmt_rupiah(saldo)}</b>\n"
+        f"Stok Tersedia: <b>{stats['stok_tersedia']:,} Akun</b>\n"
+        f"Pengguna: <b>{stats['total_user']:,}</b> | Sukses: <b>{stats['total_trx']:,} Tx</b>\n\n"
         f"Silakan pilih menu di bawah ini:"
     )
 
-    admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
     channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
 
     keyboard = [
         [
-            InlineKeyboardButton("Top Up Saldo", callback_data="topup", style="success"),
-            InlineKeyboardButton("Beli Gmail",   callback_data="beli_paket", style="success"),
+            InlineKeyboardButton("TOP UP", callback_data="topup", style="primary"),
+            InlineKeyboardButton("BELI AKUN", callback_data="beli_paket", style="primary"),
         ],
         [
-            InlineKeyboardButton("Referral",      callback_data="referral", style="success"),
-            InlineKeyboardButton("Klaim Garansi", callback_data="garansi", style="success"),
+            InlineKeyboardButton("RIWAYAT MUTASI", callback_data="riwayat_mutasi", style="primary"),
         ],
         [
-            InlineKeyboardButton("Riwayat Beli",   callback_data="riwayat_beli", style="success"),
-            InlineKeyboardButton("Riwayat Mutasi", callback_data="riwayat_mutasi", style="success"),
+            InlineKeyboardButton("REF", callback_data="referral", style="primary"),
+            InlineKeyboardButton("KLAIM GARANSI", callback_data="garansi", style="primary"),
+            InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("LIVE TRANSAKSI", url=channel_url, style="primary"),
+            InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
         ],
     ]
-
-    contact_row = []
-    if len(admin_contacts) == 1:
-        contact_row.append(InlineKeyboardButton("Chat Admin", url=f"https://t.me/{admin_contacts[0].lstrip('@')}", style="success"))
-    else:
-        for idx, contact in enumerate(admin_contacts, 1):
-            contact_row.append(InlineKeyboardButton(f"Chat Admin {idx}", url=f"https://t.me/{contact.lstrip('@')}", style="success"))
-
-    if len(contact_row) == 1:
-        contact_row.append(InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"))
-        keyboard.append(contact_row)
-        keyboard.append([InlineKeyboardButton("Info Akun", callback_data="info_akun", style="success")])
-    else:
-        keyboard.append(contact_row)
-        keyboard.append([
-            InlineKeyboardButton("Live Transaksi", url=channel_url, style="success"),
-            InlineKeyboardButton("Info Akun", callback_data="info_akun", style="success")
-        ])
 
     if is_admin:
         keyboard.append([
@@ -234,12 +257,14 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
     user = update.effective_user
 
-    u = db.get_user(user.id)
+    # Answer SEGERA agar spinner di tombol langsung berhenti
+    await q.answer()
+
+    u = await adb.get_user(user.id)
     if not u:
-        await q.answer("Akun tidak ditemukan.")
         return
 
-    ref_stats = db.get_referral_stats(user.id)
+    ref_stats = await adb.get_referral_stats(user.id)
     saldo     = fmt_rupiah(u["saldo"])
     teks = (
         f"<b>Info Akun</b>\n\n"
@@ -255,13 +280,37 @@ async def info_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
+async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    
+    admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
+    
+    teks = (
+        "<b>Customer Service - Warung Gmail</b>\n\n"
+        "Silakan hubungi salah satu admin di bawah untuk bantuan:"
+    )
+    
+    kb = []
+    admin_row = []
+    for idx, contact in enumerate(admin_contacts, 1):
+        username = contact.lstrip('@')
+        admin_row.append(InlineKeyboardButton(f"Admin {idx}", url=f"https://t.me/{username}", style="primary"))
+    if admin_row:
+        kb.append(admin_row)
+        
+    kb.append([InlineKeyboardButton("Kembali", callback_data="menu_utama", style="danger")])
+    
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
+
+
 async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user):
     """Beri bonus saldo ke referrer, dengan deteksi bot/spam."""
     import time
     from config import REFERRAL_BONUS, REFERRAL_SPAM_WINDOW, REFERRAL_SPAM_THRESHOLD
 
     # Cek sudah banned
-    if db.is_referral_banned(referrer_id):
+    if await adb.is_referral_banned(referrer_id):
         return
 
     # Track waktu referral masuk (anti-bot)
@@ -274,7 +323,7 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
 
     if len(times) >= REFERRAL_SPAM_THRESHOLD:
         # Deteksi bot — ban referral referrer
-        db.ban_referral(referrer_id)
+        await adb.ban_referral(referrer_id)
         logger.warning("[referral] User %d dideteksi spam referral → BANNED", referrer_id)
         try:
             await ctx.bot.send_message(
@@ -292,8 +341,8 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
         return
 
     # Tambah saldo bonus ke referrer
-    db.increment_referral_count(referrer_id)
-    db.tambah_saldo(
+    await adb.increment_referral_count(referrer_id)
+    await adb.tambah_saldo(
         referrer_id, REFERRAL_BONUS, "referral",
         f"Referral dari {new_user.full_name or new_user.id}",
         ref_id=str(new_user.id)
@@ -317,7 +366,7 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
     try:
         from handlers.live_tx import send_live_tx, censor_name, censor_id
         
-        ref_user = db.get_user(referrer_id)
+        ref_user = await adb.get_user(referrer_id)
         referrer_name = ref_user["full_name"] if ref_user else "Admin"
         
         c_ref_name = censor_name(new_user.full_name or str(new_user.id))
@@ -341,3 +390,4 @@ def register(app):
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CallbackQueryHandler(cmd_start,   pattern="^menu_utama$"))
     app.add_handler(CallbackQueryHandler(info_akun,   pattern="^info_akun$"))
+    app.add_handler(CallbackQueryHandler(chat_cs,     pattern="^chat_cs$"))

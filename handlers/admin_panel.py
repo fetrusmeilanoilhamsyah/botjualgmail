@@ -6,7 +6,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
-from database import db
+from database.db_async import adb
 from middleware.auth import admin_only
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ async def cb_admin_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    s = db.get_admin_stats()
+    s = await adb.get_admin_stats()
 
     teks = (
         f"<b>Panel Admin - Bot Jual Gmail</b>\n\n"
@@ -37,28 +37,23 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     kb = [
         [
-            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="success"),
-            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="success"),
+            InlineKeyboardButton("Statistik",          callback_data="admin_stat", style="primary"),
+            InlineKeyboardButton("Kelola Stok",         callback_data="admin_stok_refresh", style="primary"),
         ],
         [
-            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="success"),
-            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="success"),
+            InlineKeyboardButton("Paket & Harga",       callback_data="admin_paket", style="primary"),
+            InlineKeyboardButton("Klaim Garansi",       callback_data="admin_garansi_list", style="primary"),
         ],
         [
-            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="success"),
+            InlineKeyboardButton("Broadcast",           callback_data="admin_broadcast_start_cb", style="primary"),
         ],
         [InlineKeyboardButton("Menu Utama Bot",         callback_data="menu_utama", style="danger")],
     ]
 
     markup = InlineKeyboardMarkup(kb)
 
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(teks, parse_mode="HTML", reply_markup=markup)
-        except Exception:
-            await update.callback_query.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
-    else:
-        await update.message.reply_text(teks, parse_mode="HTML", reply_markup=markup)
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, markup)
 
 
 def register(app):

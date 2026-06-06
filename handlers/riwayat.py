@@ -6,15 +6,15 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
-from database import db
+from database.db_async import adb
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 5
+PAGE_SIZE = 3
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 def fmt_short_rupiah(n: int) -> str:
@@ -53,7 +53,7 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     parts = q.data.split(":")
     page  = int(parts[1]) if len(parts) > 1 else 0
 
-    riwayat = db.get_riwayat_beli(user.id, limit=100)
+    riwayat = await adb.get_riwayat_beli(user.id, limit=100)
 
     from handlers.start import kirim_atau_edit_menu
     if not riwayat:
@@ -62,7 +62,7 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "<b>Riwayat Pembelian - Warung Gmail</b>\n\n"
             "Anda belum pernah melakukan pembelian akun.",
             InlineKeyboardMarkup([[
-                InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="success"),
+                InlineKeyboardButton("Beli Sekarang", callback_data="beli_paket", style="primary"),
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
             ]])
         )
@@ -86,15 +86,15 @@ async def show_riwayat_beli(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb.append([InlineKeyboardButton(
             f"Lihat Data Akun #{r['id']}",
             callback_data=f"lihat_akun:{r['id']}",
-            style="success"
+            style="primary"
         )])
 
     # Navigasi
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_beli:{page-1}", style="success"))
+        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_beli:{page-1}", style="primary"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_beli:{page+1}", style="success"))
+        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_beli:{page+1}", style="primary"))
     if nav:
         kb.append(nav)
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
@@ -110,47 +110,103 @@ async def lihat_akun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pembelian_id = int(q.data.split(":", 1)[1])
     await q.answer()
 
-    detail = db.get_detail_pembelian(pembelian_id, user.id)
+    detail = await adb.get_detail_pembelian(pembelian_id, user.id)
     if not detail:
         await q.answer("Data tidak ditemukan.", show_alert=True)
         return
 
     akun_list = detail.get("akun_list", [])
+    use_file_delivery = (len(akun_list) > 5)
+
     teks = (
         f"<b>Detail Pesanan #{pembelian_id}</b>\n"
         f"Paket: {detail['paket_nama']}\n"
         f"Total Bayar: {fmt_short_rupiah(detail['harga_bayar'])} ({fmt_rupiah(detail['harga_bayar'])})\n"
         f"Tanggal: {fmt_dt(detail['created_at'])}\n"
         f"Garansi s/d: {fmt_dt(detail['garansi_until'])}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "<b>DATA AKUN GMAIL</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
     )
 
-    for i, a in enumerate(akun_list, 1):
-        teks += f"\n<b>Akun #{i}</b>\n"
-        teks += f"   Email   : <code>{a['email']}</code>\n"
-        teks += f"   Password: <code>{a['password']}</code>\n"
-        if a.get("recovery"):
-            teks += f"   Recovery: <code>{a['recovery']}</code>\n"
-        if a.get("tgl_buat"):
-            teks += f"   Dibuat  : {a['tgl_buat']}\n"
-        if a.get("catatan"):
-            teks += f"   Catatan : {a['catatan']}\n"
+    if use_file_delivery:
+        teks += "Karena jumlah pembelian yang besar, data akun lengkap dikirim dalam bentuk file .txt di bawah ini."
+    else:
+        teks += (
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "<b>DATA AKUN GMAIL</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+        for i, a in enumerate(akun_list, 1):
+            teks += f"\n<b>Akun #{i}</b>\n"
+            teks += f"   Email   : <code>{a['email']}</code>\n"
+            teks += f"   Password: <code>{a['password']}</code>\n"
+            if a.get("recovery"):
+                teks += f"   Recovery: <code>{a['recovery']}</code>\n"
+            if a.get("tgl_buat"):
+                teks += f"   Dibuat  : {a['tgl_buat']}\n"
+            if a.get("catatan"):
+                teks += f"   Catatan : {a['catatan']}\n"
 
     kb = [[
-        InlineKeyboardButton("Riwayat Beli", callback_data="riwayat_beli", style="success"),
+        InlineKeyboardButton("Riwayat Beli", callback_data="riwayat_beli", style="primary"),
         InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger"),
     ]]
     if detail.get("status") == "aktif":
         now_iso = datetime.now().isoformat()
         if detail.get("garansi_until", "") > now_iso:
             kb.insert(0, [InlineKeyboardButton(
-                "Klaim Garansi", callback_data=f"pilih_garansi:{pembelian_id}", style="danger"
+                "Klaim Garansi", callback_data=f"pilih_garansi:{pembelian_id}", style="primary"
             )])
 
     from handlers.start import kirim_atau_edit_menu
     await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
+
+    if use_file_delivery:
+        import io
+        # Build clean TXT file
+        txt_lines = [
+            f"==================================================",
+            f"DATA AKUN GMAIL - INVOICE #{pembelian_id}",
+            f"==================================================\n",
+            "FORMAT IMPOR (Email|Password|Recovery):",
+            "--------------------------------------------------"
+        ]
+        for a in akun_list:
+            rec = a.get("recovery") or ""
+            txt_lines.append(f"{a['email']}|{a['password']}|{rec}")
+        txt_lines.append("--------------------------------------------------\n")
+        txt_lines.append("DETAIL AKUN:")
+        txt_lines.append("--------------------------------------------------")
+        for i, a in enumerate(akun_list, 1):
+            txt_lines.append(f"#{i}")
+            txt_lines.append(f"Email   : {a['email']}")
+            txt_lines.append(f"Password: {a['password']}")
+            if a.get("recovery"):
+                txt_lines.append(f"Recovery: {a['recovery']}")
+            if a.get("tgl_buat"):
+                txt_lines.append(f"Dibuat  : {a['tgl_buat']}")
+            if a.get("catatan"):
+                txt_lines.append(f"Catatan : {a['catatan']}")
+            txt_lines.append("")
+        txt_lines.append("--------------------------------------------------")
+        txt_lines.append("Terima kasih telah berbelanja di Warung Gmail.")
+        txt_lines.append("==================================================")
+        
+        txt_content = "\n".join(txt_lines)
+        bio = io.BytesIO(txt_content.encode("utf-8"))
+        bio.name = f"Gmail_Order_{pembelian_id}.txt"
+        
+        try:
+            await ctx.bot.send_document(
+                chat_id=user.id,
+                document=bio,
+                filename=f"Gmail_Order_{pembelian_id}.txt",
+                caption=f"Detail Akun Gmail Invoice #{pembelian_id}"
+            )
+        except Exception as e:
+            logger.error("[riwayat] Gagal mengirim dokumen akun: %s", e)
+            await ctx.bot.send_message(
+                chat_id=user.id,
+                text="Gagal mengirim file data akun. Silakan hubungi admin untuk bantuan."
+            )
 
 
 # ── RIWAYAT MUTASI ───────────────────────────────────────────────────────────
@@ -172,7 +228,7 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     parts = q.data.split(":")
     page  = int(parts[1]) if len(parts) > 1 else 0
 
-    mutasi = db.get_riwayat_mutasi(user.id, limit=100)
+    mutasi = await adb.get_riwayat_mutasi(user.id, limit=100)
 
     from handlers.start import kirim_atau_edit_menu
     if not mutasi:
@@ -203,9 +259,9 @@ async def show_riwayat_mutasi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}", style="success"))
+        nav.append(InlineKeyboardButton("Sebelumnya", callback_data=f"riwayat_mutasi:{page-1}", style="primary"))
     if end < total:
-        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_mutasi:{page+1}", style="success"))
+        nav.append(InlineKeyboardButton("Berikutnya", callback_data=f"riwayat_mutasi:{page+1}", style="primary"))
     kb = []
     if nav:
         kb.append(nav)

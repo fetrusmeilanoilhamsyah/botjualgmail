@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
 from database import db
+from database.db_async import adb
 from middleware.auth import admin_only
 from config import ADMIN_NOTIF_CHAT
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 @admin_only
@@ -35,7 +36,7 @@ async def cb_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _show_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    pending = db.get_garansi_pending()
+    pending = await adb.get_garansi_pending()
 
     if not pending:
         teks = "<b>Klaim Garansi</b>\n\nTidak ada klaim garansi yang pending."
@@ -54,20 +55,12 @@ async def _show_garansi_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             kb.append([InlineKeyboardButton(
                 f"Proses Klaim #{g['id']}",
                 callback_data=f"admin_proses_garansi:{g['id']}",
-                style="success"
+                style="primary"
             )])
         kb.append([InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger")])
 
-    user_id = update.effective_user.id
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(
-                teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-            )
-        except Exception:
-            await ctx.bot.send_message(chat_id=user_id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
-    else:
-        await ctx.bot.send_message(chat_id=user_id, text=teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -78,7 +71,7 @@ async def cb_proses_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     kb = [
-        [InlineKeyboardButton("Setujui (Kirim Akun Pengganti)", callback_data=f"admin_setuju_garansi:{garansi_id}", style="success")],
+        [InlineKeyboardButton("Setujui (Kirim Akun Pengganti)", callback_data=f"admin_setuju_garansi:{garansi_id}", style="primary")],
         [InlineKeyboardButton("Tolak", callback_data=f"admin_tolak_garansi:{garansi_id}", style="danger")],
         [InlineKeyboardButton("Kembali", callback_data="admin_garansi_list", style="danger")],
     ]
@@ -93,14 +86,15 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     # Ambil info garansi
-    pending  = db.get_garansi_pending()
+    pending  = await adb.get_garansi_pending()
     garansi  = next((g for g in pending if g["id"] == garansi_id), None)
 
     if not garansi:
-        await q.edit_message_text("Klaim tidak ditemukan.")
+        from handlers.start import edit_menu_caption_or_text
+        await edit_menu_caption_or_text(ctx, update.effective_user.id, q.message.message_id, "Klaim tidak ditemukan.", None)
         return
 
-    paket_list = db.get_all_paket()
+    paket_list = await adb.get_all_paket()
     teks = (
         f"<b>Setujui Garansi #{garansi_id}</b>\n\n"
         f"User: {garansi['full_name']}\n"
@@ -110,20 +104,23 @@ async def cb_setuju_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = [[InlineKeyboardButton(
         f"{p['nama']} (stok: {p['stok_tersedia']})",
         callback_data=f"admin_kirim_pengganti:{garansi_id}:{p['id']}",
-        style="success"
+        style="primary"
     )] for p in paket_list if p["stok_tersedia"] > 0]
     kb.append([InlineKeyboardButton("Batal", callback_data="admin_garansi_list", style="danger")])
 
     if not any(True for p in paket_list if p["stok_tersedia"] > 0):
-        await q.edit_message_text(
+        from handlers.start import kirim_atau_edit_menu
+        await kirim_atau_edit_menu(
+            update, ctx,
             "Tidak ada stok tersedia untuk pengganti. Tambahkan stok dulu.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Kelola Stok", callback_data="admin_stok_refresh", style="success")
+            InlineKeyboardMarkup([[
+                InlineKeyboardButton("Kelola Stok", callback_data="admin_stok_refresh", style="primary")
             ]])
         )
         return
 
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 @admin_only
@@ -135,23 +132,23 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     paket_id    = int(parts[2])
     await q.answer("Memproses...")
 
-    paket = db.get_paket_by_id(paket_id)
+    paket = await adb.get_paket_by_id(paket_id)
     if not paket:
-        await q.edit_message_text("Paket tidak ditemukan.")
+        from handlers.start import edit_menu_caption_or_text
+        await edit_menu_caption_or_text(ctx, update.effective_user.id, q.message.message_id, "Paket tidak ditemukan.", None)
         return
 
-    akun_list = db.ambil_stok(paket_id, paket["kuantitas"])
+    akun_list = await adb.ambil_stok(paket_id, paket["kuantitas"])
     if akun_list is None:
-        await q.edit_message_text("Stok habis saat proses. Coba paket lain.")
+        from handlers.start import edit_menu_caption_or_text
+        await edit_menu_caption_or_text(ctx, update.effective_user.id, q.message.message_id, "Stok habis saat proses. Coba paket lain.", None)
         return
 
     stok_ids = [a["id"] for a in akun_list]
-    db.resolve_garansi(garansi_id, stok_ids, admin_catatan="Pengganti dikirim admin")
+    await adb.resolve_garansi(garansi_id, stok_ids, admin_catatan="Pengganti dikirim admin")
 
     # Ambil user_id dari garansi
-    with db.get_connection() as conn:
-        row = conn.execute("SELECT user_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
-        user_id = row["user_id"] if row else None
+    user_id = await adb.get_garansi_user_id(garansi_id)
 
     if user_id:
         akun_teks = "\n\n".join(
@@ -178,12 +175,13 @@ async def cb_kirim_pengganti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.warning("[garansi] Gagal kirim ke user %d: %s", user_id, e)
 
-    await q.edit_message_text(
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(
+        update, ctx,
         f"<b>Garansi #{garansi_id} Selesai</b>\n\n"
         f"Akun pengganti berhasil dikirim ke user.",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="success"),
+        InlineKeyboardMarkup([[
+            InlineKeyboardButton("List Garansi", callback_data="admin_garansi_list", style="primary"),
             InlineKeyboardButton("Panel Admin", callback_data="admin_panel", style="danger"),
         ]])
     )
@@ -196,11 +194,12 @@ async def cb_tolak_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     db.set_session(update.effective_user.id, "admin_tolak_garansi_alasan", {"garansi_id": garansi_id, "menu_msg_id": q.message.message_id})
-    await q.edit_message_text(
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(
+        update, ctx,
         f"<b>Tolak Klaim Garansi #{garansi_id}</b>\n\n"
         "Ketik alasan penolakan (akan dikirim ke user):",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[
+        InlineKeyboardMarkup([[
             InlineKeyboardButton("Batal", callback_data="admin_garansi_list", style="danger")
         ]])
     )
@@ -224,12 +223,10 @@ async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TY
     alasan     = update.message.text.strip()
     db.clear_session(user.id)
 
-    db.tolak_garansi(garansi_id, admin_catatan=alasan)
+    await adb.tolak_garansi(garansi_id, admin_catatan=alasan)
 
     # Notif ke user
-    with db.get_connection() as conn:
-        row = conn.execute("SELECT user_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
-        user_id = row["user_id"] if row else None
+    user_id = await adb.get_garansi_user_id(garansi_id)
 
     if user_id:
         try:
@@ -250,12 +247,8 @@ async def admin_terima_alasan_tolak(update: Update, ctx: ContextTypes.DEFAULT_TY
     
     if menu_msg_id:
         try:
-            await ctx.bot.edit_message_text(
-                chat_id=user.id,
-                message_id=menu_msg_id,
-                text=teks_hasil,
-                reply_markup=InlineKeyboardMarkup(kb)
-            )
+            from handlers.start import edit_menu_caption_or_text
+            await edit_menu_caption_or_text(ctx, user.id, menu_msg_id, teks_hasil, InlineKeyboardMarkup(kb))
             return
         except Exception:
             pass

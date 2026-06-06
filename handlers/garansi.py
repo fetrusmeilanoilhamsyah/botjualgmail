@@ -13,13 +13,16 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from database import db
+from database.db_async import adb
 from config import ADMIN_CONTACT, ADMIN_NOTIF_CHATS
 
 logger = logging.getLogger(__name__)
 
 
+from handlers.start import kirim_atau_edit_menu, edit_menu_caption_or_text
+
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -28,7 +31,7 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await q.answer()
 
-    riwayat = db.get_riwayat_beli(user.id, limit=50)
+    riwayat = await adb.get_riwayat_beli(user.id, limit=50)
     now_iso = datetime.now().isoformat()
 
     # Filter: hanya yang status 'aktif' dan garansi belum habis
@@ -38,12 +41,12 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ]
 
     if not valid:
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "<b>Tidak Ada Garansi Aktif</b>\n\n"
             "Tidak ada pembelian yang masih dalam masa garansi (24 jam).\n\n"
             f"Jika ada masalah, hubungi admin: {ADMIN_CONTACT}",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
@@ -54,10 +57,10 @@ async def show_garansi_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for r in valid:
         sisa_jam = (datetime.fromisoformat(r["garansi_until"]) - datetime.now()).seconds // 3600
         label    = f"#{r['id']} – {r['paket_nama']} (sisa ~{sisa_jam}j)"
-        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="success")])
+        kb.append([InlineKeyboardButton(label, callback_data=f"pilih_garansi:{r['id']}", style="primary")])
 
     kb.append([InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")])
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -67,25 +70,27 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     pembelian_id = int(q.data.split(":", 1)[1])
     await q.answer()
 
-    detail = db.get_detail_pembelian(pembelian_id, user.id)
+    detail = await adb.get_detail_pembelian(pembelian_id, user.id)
     if not detail:
-        await q.edit_message_text("Pembelian tidak ditemukan.")
+        await edit_menu_caption_or_text(ctx, user.id, q.message.message_id, "Pembelian tidak ditemukan.", None)
         return
 
     if detail["status"] != "aktif":
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "Pembelian ini sudah diklaim garansinya atau sudah selesai.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Kembali", callback_data="garansi", style="success")
+            InlineKeyboardMarkup([[
+                InlineKeyboardButton("Kembali", callback_data="garansi", style="danger")
             ]])
         )
         return
 
     now_iso = datetime.now().isoformat()
     if detail["garansi_until"] <= now_iso:
-        await q.edit_message_text(
+        await kirim_atau_edit_menu(
+            update, ctx,
             "Masa garansi pembelian ini sudah habis.",
-            reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
             ]])
         )
@@ -101,7 +106,7 @@ async def pilih_garansi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Ketik alasan klaim:"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="garansi", style="danger")]]
-    await q.edit_message_text(teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -131,8 +136,8 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+                await edit_menu_caption_or_text(
+                    ctx, user.id, menu_msg_id, teks_err, InlineKeyboardMarkup(kb)
                 )
                 return
             except Exception:
@@ -140,7 +145,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.send_message(chat_id=user.id, text=teks_err, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    garansi_id = db.create_garansi(pembelian_id, user.id, alasan)
+    garansi_id = await adb.create_garansi(pembelian_id, user.id, alasan)
 
     if garansi_id is None:
         teks_fail = (
@@ -153,8 +158,8 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         if menu_msg_id:
             try:
-                await ctx.bot.edit_message_text(
-                    chat_id=user.id, message_id=menu_msg_id, text=teks_fail, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+                await edit_menu_caption_or_text(
+                    ctx, user.id, menu_msg_id, teks_fail, InlineKeyboardMarkup(kb)
                 )
                 return
             except Exception:
@@ -170,11 +175,11 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Pengajuan klaim Anda telah dicatat. Admin kami akan segera memproses penggantian akun.\n"
         f"Hubungi admin jika mendesak: {ADMIN_CONTACT}"
     )
-    kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="success")]]
+    kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
     if menu_msg_id:
         try:
-            await ctx.bot.edit_message_text(
-                chat_id=user.id, message_id=menu_msg_id, text=teks_success, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
+            await edit_menu_caption_or_text(
+                ctx, user.id, menu_msg_id, teks_success, InlineKeyboardMarkup(kb)
             )
             return
         except Exception:
@@ -183,7 +188,7 @@ async def handle_garansi_alasan(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Notif admin
     try:
-        user_info = db.get_user(user.id)
+        user_info = await adb.get_user(user.id)
         notif = (
             f"<b>KLAIM GARANSI BARU</b>\n\n"
             f"User: {user.full_name} (@{user.username or '-'}) [<code>{user.id}</code>]\n"

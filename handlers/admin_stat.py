@@ -8,14 +8,14 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
-from database import db
+from database.db_async import adb
 from middleware.auth import admin_only
 
 logger = logging.getLogger(__name__)
 
 
 def fmt_rupiah(n: int) -> str:
-    return f"Rp {n:,.0f}".replace(",", ".")
+    return f"Rp{n:,.0f}".replace(",", ".")
 
 
 def fmt_dt(iso_str: str) -> str:
@@ -38,7 +38,7 @@ async def cb_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    s   = db.get_admin_stats()
+    s   = await adb.get_admin_stats()
     now = datetime.now().strftime("%d %b %Y %H:%M")
 
     teks = (
@@ -67,31 +67,14 @@ async def _show_stat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     kb = [
         [
-            InlineKeyboardButton("Refresh",        callback_data="admin_stat", style="success"),
-            InlineKeyboardButton("Klaim Garansi",  callback_data="admin_garansi_list", style="success"),
-        ],
-        [
-            InlineKeyboardButton("Kelola Stok",    callback_data="admin_stok_refresh", style="success"),
-            InlineKeyboardButton("Broadcast",       callback_data="admin_broadcast_start_cb", style="success"),
-        ],
-        [InlineKeyboardButton("Panel Admin",       callback_data="admin_panel", style="danger")],
+            InlineKeyboardButton("Refresh",        callback_data="admin_stat", style="primary"),
+            InlineKeyboardButton("Panel Admin",     callback_data="admin_panel", style="danger"),
+        ]
     ]
 
 
-    reply_target = update.message if update.message else update.callback_query.message
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(
-                teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-            )
-        except Exception:
-            await reply_target.reply_text(
-                teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-            )
-    else:
-        await reply_target.reply_text(
-            teks, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb)
-        )
+    from handlers.start import kirim_atau_edit_menu
+    await kirim_atau_edit_menu(update, ctx, teks, InlineKeyboardMarkup(kb))
 
 
 def register(app):
