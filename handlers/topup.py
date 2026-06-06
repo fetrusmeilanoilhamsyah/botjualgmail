@@ -106,10 +106,10 @@ async def show_topup_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     teks = (
-        "<b>Top Up Saldo - Warung Gmail</b>\n\n"
-        f"Minimum top up: <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
-        f"Maksimum top up: <b>{fmt_rupiah(TOPUP_MAX)}</b>\n\n"
-        "Silakan pilih salah satu nominal preset:"
+        f"<tg-emoji emoji-id=\"5364075889669718872\">💵</tg-emoji> <b>TOP UP SALDO</b>\n\n"
+        f"<blockquote>• Min Top Up : <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
+        f"• Max Top Up : <b>{fmt_rupiah(TOPUP_MAX)}</b></blockquote>\n"
+        f"Silakan pilih nominal preset di bawah:"
     )
     kb = [
         [
@@ -146,10 +146,10 @@ async def show_topup_manual_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     await q.answer()
 
     teks = (
-        "<b>Top Up Nominal Manual - Warung Gmail</b>\n\n"
-        f"Minimum: <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
-        f"Maksimum: <b>{fmt_rupiah(TOPUP_MAX)}</b>\n\n"
-        "Ketik nominal yang ingin kamu top up (angka saja, contoh: <code>15000</code>):"
+        f"<tg-emoji emoji-id=\"5364075889669718872\">💵</tg-emoji> <b>TOP UP NOMINAL MANUAL</b>\n\n"
+        f"<blockquote>• Minimum  : <b>{fmt_rupiah(TOPUP_MIN)}</b>\n"
+        f"• Maksimum : <b>{fmt_rupiah(TOPUP_MAX)}</b></blockquote>\n"
+        f"Ketik nominal top up (angka saja, contoh: <code>15000</code>):"
     )
     kb = [[InlineKeyboardButton("Batal", callback_data="topup", style="danger")]]
     from handlers.start import kirim_atau_edit_menu
@@ -273,13 +273,13 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
         qr_img = generate_qr_bytes(payment_number)
 
         teks = (
-            f"<b>Invoice Top Up - Warung Gmail</b>\n\n"
-            f"Nominal: <b>{fmt_short_rupiah(amount)}</b> ({fmt_rupiah(amount)})\n"
-            f"Total Bayar: <b>{fmt_rupiah(total_payment)}</b>\n"
-            f"Order ID: <code>{order_id}</code>\n"
-            f"Batas Pembayaran: {readable_exp}\n\n"
-            "Scan QRIS di atas menggunakan e-wallet atau m-banking Anda.\n"
-            "Saldo akan otomatis masuk setelah pembayaran sukses terverifikasi."
+            f"<tg-emoji emoji-id=\"5364075889669718872\">💵</tg-emoji> <b>INVOICE TOP UP</b>\n\n"
+            f"<blockquote>• Order ID : <code>{order_id}</code>\n"
+            f"• Nominal  : <b>{fmt_rupiah(amount)}</b>\n"
+            f"• Total    : <b>{fmt_rupiah(total_payment)}</b>\n"
+            f"• Batas    : <b>{readable_exp}</b></blockquote>\n"
+            f"Scan QRIS di atas untuk membayar.\n"
+            f"Saldo masuk otomatis setelah terverifikasi."
         )
         kb = [
             [
@@ -313,11 +313,11 @@ async def proses_topup_order(update: Update, ctx: ContextTypes.DEFAULT_TYPE, amo
     else:
         # Mode manual
         teks = (
-            f"<b>Top Up Saldo (Manual) - Warung Gmail</b>\n\n"
-            f"Nominal: <b>{fmt_short_rupiah(amount)}</b> ({fmt_rupiah(amount)})\n"
-            f"Order ID: <code>{order_id}</code>\n\n"
-            "Hubungi admin untuk melakukan verifikasi top up manual Anda.\n"
-            f"Kontak Admin: {ADMIN_CONTACT}"
+            f"<tg-emoji emoji-id=\"5364075889669718872\">💵</tg-emoji> <b>TOP UP MANUAL</b>\n\n"
+            f"<blockquote>• Order ID : <code>{order_id}</code>\n"
+            f"• Nominal  : <b>{fmt_rupiah(amount)}</b></blockquote>\n"
+            f"Hubungi admin untuk verifikasi pembayaran.\n"
+            f"Kontak Admin: <b>{ADMIN_CONTACT}</b>"
         )
         kb = [[InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")]]
         
@@ -402,9 +402,9 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(
                 chat_id=topup["user_id"],
                 text=(
-                    f"<b>Top Up Berhasil!</b>\n\n"
-                    f"Nominal: <b>{fmt_short_rupiah(topup['jumlah'])}</b> ({fmt_rupiah(topup['jumlah'])})\n"
-                    f"Saldo saat ini: <b>{fmt_rupiah(saldo)}</b>"
+                    f"<b>✅ TOP UP BERHASIL</b>\n\n"
+                    f"<blockquote>• Jumlah : <b>{fmt_rupiah(topup['jumlah'])}</b>\n"
+                    f"• Saldo  : <b>{fmt_rupiah(saldo)}</b></blockquote>"
                 ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
@@ -422,7 +422,10 @@ async def cek_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             # Kirim pesan status gagal terlebih dahulu
             await ctx.bot.send_message(
                 chat_id=topup["user_id"],
-                text=f"<b>Pembayaran {status_teks}</b>\n\nQR Code sudah tidak berlaku. Silakan ajukan top up baru.",
+                text=(
+                    f"<b>❌ PEMBAYARAN {status_teks.upper()}</b>\n\n"
+                    f"<blockquote>QR Code sudah tidak berlaku. Silakan ajukan top up baru.</blockquote>"
+                ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("Top Up Lagi", callback_data="topup", style="primary"),
@@ -456,7 +459,10 @@ async def batal_topup(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Kirim pesan konfirmasi batal terlebih dahulu
         await ctx.bot.send_message(
             chat_id=q.from_user.id,
-            text="<b>Top Up Dibatalkan</b>\n\nTransaksi top up Anda berhasil dibatalkan.",
+            text=(
+                f"<b>❌ TOP UP DIBATALKAN</b>\n\n"
+                f"<blockquote>Transaksi top up Anda berhasil dibatalkan.</blockquote>"
+            ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Menu Utama", callback_data="menu_utama", style="danger")
