@@ -322,6 +322,7 @@ async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: int, new_user):
     """Beri bonus saldo ke referrer, dengan deteksi bot/spam."""
     import time
+    import json
     from config import REFERRAL_BONUS, REFERRAL_SPAM_WINDOW, REFERRAL_SPAM_THRESHOLD
 
     # Cek sudah banned
@@ -329,12 +330,16 @@ async def _proses_referral_bonus(ctx: ContextTypes.DEFAULT_TYPE, referrer_id: in
         return
 
     # Track waktu referral masuk (anti-bot)
-    key = f"ref_times_{referrer_id}"
+    key = f"ref_spam_{referrer_id}"
     now = time.time()
-    times = ctx.bot_data.get(key, [])
+    raw = await adb.get_setting(key)
+    try:
+        times = json.loads(raw) if raw else []
+    except Exception:
+        times = []
     times = [t for t in times if now - t < REFERRAL_SPAM_WINDOW]
     times.append(now)
-    ctx.bot_data[key] = times
+    await adb.set_setting(key, json.dumps(times))
 
     if len(times) >= REFERRAL_SPAM_THRESHOLD:
         # Deteksi bot — ban referral referrer
