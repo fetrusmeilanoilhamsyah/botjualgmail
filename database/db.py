@@ -438,12 +438,10 @@ def get_paket_aktif() -> list:
             ORDER BY p.urutan ASC
         """).fetchall()
         res = []
+        global_stok = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
         for r in rows:
             d = dict(r)
-            d["stok_tersedia"] = conn.execute(
-                "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
-                (d["id"],)
-            ).fetchone()[0]
+            d["stok_tersedia"] = global_stok
             res.append(d)
         return res
 
@@ -454,10 +452,7 @@ def get_paket_by_id(paket_id: int) -> dict | None:
         if not row:
             return None
         d = dict(row)
-        d["stok_tersedia"] = conn.execute(
-            "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
-            (d["id"],)
-        ).fetchone()[0]
+        d["stok_tersedia"] = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
         return d
 
 
@@ -472,12 +467,10 @@ def get_all_paket() -> list:
             ORDER BY p.urutan ASC
         """).fetchall()
         res = []
+        global_stok = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
         for r in rows:
             d = dict(r)
-            d["stok_tersedia"] = conn.execute(
-                "SELECT COUNT(*) FROM stok_gmail WHERE paket_id=? AND terjual=0",
-                (d["id"],)
-            ).fetchone()[0]
+            d["stok_tersedia"] = global_stok
             res.append(d)
         return res
 
@@ -569,33 +562,29 @@ def bulk_add_stok(paket_id: int, lines: list) -> tuple[int, int]:
 
 def ambil_stok(jumlah: int, paket_id: int = None) -> list | None:
     """
-    ATOMIC: Ambil N akun dari stok (per paket atau global).
+    ATOMIC: Ambil N akun dari stok secara global (paket_id diabaikan dalam filter pencarian).
     """
     with get_connection() as conn:
         conn.execute("BEGIN")
         now = datetime.now().isoformat()
-        if paket_id is not None:
-            rows = conn.execute("""
-                UPDATE stok_gmail SET terjual=1, terjual_at=?
-                WHERE id IN (
-                    SELECT id FROM stok_gmail
-                    WHERE terjual=0 AND paket_id=? LIMIT ?
-                )
-                RETURNING id, email, password, recovery, tgl_buat, catatan
-            """, (now, paket_id, jumlah)).fetchall()
-        else:
-            rows = conn.execute("""
-                UPDATE stok_gmail SET terjual=1, terjual_at=?
-                WHERE id IN (
-                    SELECT id FROM stok_gmail
-                    WHERE terjual=0 LIMIT ?
-                )
-                RETURNING id, email, password, recovery, tgl_buat, catatan
-            """, (now, jumlah)).fetchall()
+        rows = conn.execute("""
+            UPDATE stok_gmail SET terjual=1, terjual_at=?
+            WHERE id IN (
+                SELECT id FROM stok_gmail
+                WHERE terjual=0 LIMIT ?
+            )
+            RETURNING id, email, password, recovery, tgl_buat, catatan
+        """, (now, jumlah)).fetchall()
 
         if len(rows) < jumlah:
             conn.execute("ROLLBACK")
             return None
+
+        # Jika paket_id diberikan, update paket_id di DB agar history transaksi konsisten
+        if paket_id is not None:
+            stok_ids = [r["id"] for r in rows]
+            for sid in stok_ids:
+                conn.execute("UPDATE stok_gmail SET paket_id=? WHERE id=?", (paket_id, sid))
 
         conn.execute("COMMIT")
     return [dict(r) for r in rows]
