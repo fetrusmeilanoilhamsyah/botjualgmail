@@ -70,7 +70,14 @@ async def show_paket(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     temp_row = []
     for p in paket_list:
         label = f"{p['kuantitas']} Pcs — {fmt_short_rupiah(p['harga'])}"
-        temp_row.append(InlineKeyboardButton(label, callback_data=f"konfirmasi_beli:{p['id']}", style="primary"))
+        temp_row.append(
+            InlineKeyboardButton(
+                label,
+                callback_data=f"konfirmasi_beli:{p['id']}",
+                style="primary",
+                icon_custom_emoji_id="6156923364997862692"
+            )
+        )
         if len(temp_row) == 2:
             keyboard.append(temp_row)
             temp_row = []

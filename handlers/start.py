@@ -251,21 +251,46 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ),
         ],
         [
-            InlineKeyboardButton("RIWAYAT MUTASI", callback_data="riwayat_mutasi", style="primary"),
+            InlineKeyboardButton(
+                "RIWAYAT MUTASI",
+                callback_data="riwayat_mutasi",
+                style="primary",
+                icon_custom_emoji_id="5253742260054409879"
+            ),
         ],
     ]
 
     # Row 3 (Ref & Klaim Garansi)
     row3 = [
-        InlineKeyboardButton("REF", callback_data="referral", style="primary"),
-        InlineKeyboardButton("KLAIM GARANSI", callback_data="garansi", style="primary"),
+        InlineKeyboardButton(
+            "REF",
+            callback_data="referral",
+            style="primary",
+            icon_custom_emoji_id="6156448083916887235"
+        ),
+        InlineKeyboardButton(
+            "KLAIM GARANSI",
+            callback_data="garansi",
+            style="primary",
+            icon_custom_emoji_id="6158892349805040268"
+        ),
     ]
     keyboard.append(row3)
 
     # Row 4 (Live Transaksi & Info Akun)
     keyboard.append([
-        InlineKeyboardButton("LIVE TRANSAKSI", url=channel_url, style="primary"),
-        InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
+        InlineKeyboardButton(
+            "LIVE TRANSAKSI",
+            url=channel_url,
+            style="primary",
+            icon_custom_emoji_id="5244837092042750681"
+        ),
+        InlineKeyboardButton(
+            "INFO AKUN",
+            callback_data="info_akun",
+            style="primary",
+            icon_custom_emoji_id="5452069934089641166"
+        ),
     ])
 
     # Row 5 (CHAT CS - full-width with custom emoji and red style)
