@@ -243,19 +243,27 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("RIWAYAT MUTASI", callback_data="riwayat_mutasi", style="primary"),
         ],
-        [
-            InlineKeyboardButton("REF", callback_data="referral", style="primary"),
-            InlineKeyboardButton("KLAIM GARANSI", callback_data="garansi", style="primary"),
-            InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"),
-        ],
-        [
-            InlineKeyboardButton("LIVE TRANSAKSI", url=channel_url, style="primary"),
-            InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
-        ],
     ]
 
+    # Row 3 (Ref & Klaim Garansi, plus Chat CS if not admin)
+    row3 = [
+        InlineKeyboardButton("REF", callback_data="referral", style="primary"),
+        InlineKeyboardButton("KLAIM GARANSI", callback_data="garansi", style="primary"),
+    ]
+    if not is_admin:
+        row3.append(InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"))
+    keyboard.append(row3)
+
+    # Row 4 (Live Transaksi & Info Akun)
+    keyboard.append([
+        InlineKeyboardButton("LIVE TRANSAKSI", url=channel_url, style="primary"),
+        InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
+    ])
+
+    # If admin, place Chat CS and Panel Admin side-by-side
     if is_admin:
         keyboard.append([
+            InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"),
             InlineKeyboardButton("PANEL ADMIN", callback_data="admin_panel", style="danger"),
         ])
 
@@ -297,7 +305,7 @@ async def chat_cs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admin_contacts = [c.strip() for c in ADMIN_CONTACT.split(",")]
     
     teks = (
-        "<tg-emoji emoji-id=\"6156562763838656912\">📢</tg-emoji> <b>Customer Service - Warung Gmail</b>\n\n"
+        "<tg-emoji emoji-id=\"6003735582495216112\">⚡️</tg-emoji> <b>Customer Service - Warung Gmail</b>\n\n"
         "Silakan hubungi salah satu admin di bawah untuk bantuan:"
     )
     
