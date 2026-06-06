@@ -4,6 +4,7 @@ handlers/start.py - Menu utama & /start
 import logging
 import os
 import time
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
@@ -222,9 +223,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             except (ValueError, Exception) as e:
                 logger.warning("[start] referral error: %s", e)
     
-    user_data = await adb.get_user(user.id)
+    user_data, stats = await asyncio.gather(
+        adb.get_user(user.id),
+        adb.get_store_stats()
+    )
     saldo     = user_data["saldo"] if user_data else 0
-    stats     = await adb.get_store_stats()
 
     is_admin = user.id in ADMIN_IDS
     teks = (
