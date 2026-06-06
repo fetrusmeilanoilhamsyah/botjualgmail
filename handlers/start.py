@@ -224,11 +224,10 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     is_admin = user.id in ADMIN_IDS
     teks = (
-        f"<b><a href=\"https://t.me/warunggmail\">WARUNG GMAIL BOT</a></b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"<tg-emoji emoji-id=\"6003735582495216112\">✈️</tg-emoji> User: <code>{user.id}</code> | <tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo: <b>{fmt_rupiah(saldo)}</b>\n"
-        f"<tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> Stok: <b>{stats['stok_tersedia']:,} Pcs</b> | <tg-emoji emoji-id=\"5244837092042750681\">📈</tg-emoji> Trx: <b>{stats['total_trx']:,} Tx</b>\n"
-        f"━━━━━━━━━━━━━━━━━━"
+        f"<tg-emoji emoji-id=\"6003735582495216112\">✈️</tg-emoji> <b><a href=\"https://t.me/warunggmail\">WARUNG GMAIL BOT</a></b>\n\n"
+        f"<blockquote><tg-emoji emoji-id=\"6003735582495216112\">✈️</tg-emoji> User: <code>{user.id}</code>\n"
+        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo: <b>{fmt_rupiah(saldo)}</b></blockquote>\n"
+        f"<blockquote><tg-emoji emoji-id=\"5260587686304956325\">🌐</tg-emoji> Stok: <b>{stats['stok_tersedia']:,} Pcs</b> | <tg-emoji emoji-id=\"5244837092042750681\">📈</tg-emoji> Trx: <b>{stats['total_trx']:,} Tx</b></blockquote>"
     )
 
     channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
