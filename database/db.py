@@ -425,8 +425,8 @@ def get_user_topups(user_id: int, limit: int = 10) -> list:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_paket_aktif() -> list:
+    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
-        total_stok = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
         rows = conn.execute("""
             SELECT p.* FROM paket_gmail p
             WHERE p.aktif=1
@@ -441,8 +441,8 @@ def get_paket_aktif() -> list:
 
 
 def get_paket_by_id(paket_id: int) -> dict | None:
+    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
-        total_stok = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
         row = conn.execute("SELECT p.* FROM paket_gmail p WHERE p.id=?", (paket_id,)).fetchone()
         if not row:
             return None
@@ -453,15 +453,19 @@ def get_paket_by_id(paket_id: int) -> dict | None:
 
 def get_all_paket() -> list:
     """Untuk admin: tampilkan semua paket termasuk nonaktif."""
+    total_stok = get_store_stats()["stok_tersedia"]
     with get_connection() as conn:
-        total_stok = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE terjual=0").fetchone()[0]
-        rows = conn.execute("SELECT p.* FROM paket_gmail p ORDER BY p.urutan ASC").fetchall()
+        rows = conn.execute("""
+            SELECT p.*, COUNT(s.id) as stok_total
+            FROM paket_gmail p
+            LEFT JOIN stok_gmail s ON s.paket_id=p.id
+            GROUP BY p.id
+            ORDER BY p.urutan ASC
+        """).fetchall()
         res = []
         for r in rows:
             d = dict(r)
             d["stok_tersedia"] = total_stok
-            # Untuk total stok di database (termasuk terjual)
-            d["stok_total"] = conn.execute("SELECT COUNT(*) FROM stok_gmail WHERE paket_id=?", (d["id"],)).fetchone()[0]
             res.append(d)
         return res
 
