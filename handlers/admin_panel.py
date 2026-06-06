@@ -30,7 +30,7 @@ async def _show_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     teks = (
         f"<b>⚙️ CONTROL PANEL ADMIN</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"<tg-emoji emoji-id=\"6158694317452956325\">👥</tg-emoji> <b>Total Pengguna:</b> {s['total_user']:,} orang\n"
+        f"<tg-emoji emoji-id=\"6158694317452956321\">👥</tg-emoji> <b>Total Pengguna:</b> {s['total_user']:,} orang\n"
         f"<tg-emoji emoji-id=\"6003502340001238882\">📈</tg-emoji> <b>Transaksi Hari Ini:</b> {s['trx_hari_ini']} sukses\n"
         f"<tg-emoji emoji-id=\"6159113038109611127\">🚨</tg-emoji> <b>Klaim Garansi Pending:</b> <b>{s['garansi_pending']}</b> request\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
