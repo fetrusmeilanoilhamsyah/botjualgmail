@@ -258,9 +258,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
     ])
 
-    # Row 5 (CHAT CS - full-width with ⚡️ emoji)
+    # Row 5 (CHAT CS - full-width with custom emoji and red style)
     keyboard.append([
-        InlineKeyboardButton("⚡️ CHAT CS", callback_data="chat_cs", style="primary")
+        InlineKeyboardButton(
+            "CHAT CS",
+            callback_data="chat_cs",
+            style="danger",
+            icon_custom_emoji_id="6003735582495216112"
+        )
     ])
 
     # Row 6 (PANEL ADMIN - if admin, full-width)
