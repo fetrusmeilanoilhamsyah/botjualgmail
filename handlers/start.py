@@ -245,13 +245,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ],
     ]
 
-    # Row 3 (Ref & Klaim Garansi, plus Chat CS if not admin)
+    # Row 3 (Ref & Klaim Garansi)
     row3 = [
         InlineKeyboardButton("REF", callback_data="referral", style="primary"),
         InlineKeyboardButton("KLAIM GARANSI", callback_data="garansi", style="primary"),
     ]
-    if not is_admin:
-        row3.append(InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"))
     keyboard.append(row3)
 
     # Row 4 (Live Transaksi & Info Akun)
@@ -260,11 +258,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("INFO AKUN", callback_data="info_akun", style="primary"),
     ])
 
-    # If admin, place Chat CS and Panel Admin side-by-side
+    # Row 5 (CHAT CS - full-width with ⚡️ emoji)
+    keyboard.append([
+        InlineKeyboardButton("⚡️ CHAT CS", callback_data="chat_cs", style="primary")
+    ])
+
+    # Row 6 (PANEL ADMIN - if admin, full-width)
     if is_admin:
         keyboard.append([
-            InlineKeyboardButton("CHAT CS", callback_data="chat_cs", style="primary"),
-            InlineKeyboardButton("PANEL ADMIN", callback_data="admin_panel", style="danger"),
+            InlineKeyboardButton("PANEL ADMIN", callback_data="admin_panel", style="danger")
         ])
 
     markup = InlineKeyboardMarkup(keyboard)
