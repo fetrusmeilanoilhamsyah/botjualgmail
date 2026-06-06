@@ -734,37 +734,48 @@ def get_pembelian_by_id(pembelian_id: int) -> dict | None:
 
 def create_garansi(pembelian_id: int, user_id: int, alasan: str) -> int | None:
     """
-    Buat klaim garansi. Return garansi_id atau None jika garansi sudah habis.
+    Buat klaim garansi secara ATOMIC. Return garansi_id atau None jika garansi sudah habis.
     Cek: (1) pembelian milik user, (2) garansi belum kadaluarsa, (3) belum ada klaim aktif.
     """
     with get_connection() as conn:
-        beli = conn.execute(
-            "SELECT id, garansi_until, status FROM pembelian WHERE id=? AND user_id=?",
-            (pembelian_id, user_id)
-        ).fetchone()
-        if not beli:
-            return None  # bukan punya dia
-        if beli["status"] != "aktif":
-            return None  # sudah klaim garansi sebelumnya
-        now = datetime.now().isoformat()
-        if beli["garansi_until"] < now:
-            return None  # kadaluarsa
+        conn.execute("BEGIN")
+        try:
+            beli = conn.execute(
+                "SELECT id, garansi_until, status FROM pembelian WHERE id=? AND user_id=?",
+                (pembelian_id, user_id)
+            ).fetchone()
+            if not beli:
+                conn.execute("ROLLBACK")
+                return None  # bukan punya dia
+            if beli["status"] != "aktif":
+                conn.execute("ROLLBACK")
+                return None  # sudah klaim garansi sebelumnya
+            now = datetime.now().isoformat()
+            if beli["garansi_until"] < now:
+                conn.execute("ROLLBACK")
+                return None  # kadaluarsa
 
-        # Cek duplikat klaim aktif
-        existing = conn.execute(
-            "SELECT id FROM garansi WHERE pembelian_id=? AND status IN ('pending','diproses')",
-            (pembelian_id,)
-        ).fetchone()
-        if existing:
+            # Cek duplikat klaim aktif
+            existing = conn.execute(
+                "SELECT id FROM garansi WHERE pembelian_id=? AND status IN ('pending','diproses')",
+                (pembelian_id,)
+            ).fetchone()
+            if existing:
+                conn.execute("ROLLBACK")
+                return None
+
+            cur = conn.execute("""
+                INSERT INTO garansi(pembelian_id, user_id, alasan)
+                VALUES (?, ?, ?)
+            """, (pembelian_id, user_id, alasan))
+            
+            conn.execute("UPDATE pembelian SET status='klaim_garansi' WHERE id=?", (pembelian_id,))
+            conn.execute("COMMIT")
+            return cur.lastrowid
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            logger.error("[DB] create_garansi failed: %s", e)
             return None
-
-        cur = conn.execute("""
-            INSERT INTO garansi(pembelian_id, user_id, alasan)
-            VALUES (?, ?, ?)
-        """, (pembelian_id, user_id, alasan))
-        conn.execute("UPDATE pembelian SET status='klaim_garansi' WHERE id=?", (pembelian_id,))
-        conn.commit()
-        return cur.lastrowid
 
 
 def get_garansi_pending() -> list:
@@ -784,33 +795,47 @@ def get_garansi_pending() -> list:
 
 
 def resolve_garansi(garansi_id: int, stok_pengganti_ids: list, admin_catatan: str = "") -> bool:
-    """Admin selesaikan garansi: kirim akun pengganti."""
+    """Admin selesaikan garansi: kirim akun pengganti secara ATOMIC."""
     ids_str = ",".join(str(i) for i in stok_pengganti_ids)
     with get_connection() as conn:
-        conn.execute("""
-            UPDATE garansi SET status='selesai', stok_pengganti_ids=?,
-            admin_catatan=?, resolved_at=datetime('now','localtime')
-            WHERE id=?
-        """, (ids_str, admin_catatan, garansi_id))
-        # Update status pembelian kembali ke 'selesai'
-        row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
-        if row:
-            conn.execute("UPDATE pembelian SET status='selesai' WHERE id=?", (row["pembelian_id"],))
-        conn.commit()
-    return True
+        conn.execute("BEGIN")
+        try:
+            conn.execute("""
+                UPDATE garansi SET status='selesai', stok_pengganti_ids=?,
+                admin_catatan=?, resolved_at=datetime('now','localtime')
+                WHERE id=?
+            """, (ids_str, admin_catatan, garansi_id))
+            
+            # Update status pembelian kembali ke 'selesai'
+            row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
+            if row:
+                conn.execute("UPDATE pembelian SET status='selesai' WHERE id=?", (row["pembelian_id"],))
+            conn.execute("COMMIT")
+            return True
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            logger.error("[DB] resolve_garansi failed: %s", e)
+            return False
 
 
 def tolak_garansi(garansi_id: int, admin_catatan: str = "") -> bool:
+    """Tolak klaim garansi secara ATOMIC."""
     with get_connection() as conn:
-        row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
-        conn.execute("""
-            UPDATE garansi SET status='ditolak', admin_catatan=?,
-            resolved_at=datetime('now','localtime') WHERE id=?
-        """, (admin_catatan, garansi_id))
-        if row:
-            conn.execute("UPDATE pembelian SET status='aktif' WHERE id=?", (row["pembelian_id"],))
-        conn.commit()
-    return True
+        conn.execute("BEGIN")
+        try:
+            row = conn.execute("SELECT pembelian_id FROM garansi WHERE id=?", (garansi_id,)).fetchone()
+            conn.execute("""
+                UPDATE garansi SET status='ditolak', admin_catatan=?,
+                resolved_at=datetime('now','localtime') WHERE id=?
+            """, (admin_catatan, garansi_id))
+            if row:
+                conn.execute("UPDATE pembelian SET status='aktif' WHERE id=?", (row["pembelian_id"],))
+            conn.execute("COMMIT")
+            return True
+        except Exception as e:
+            conn.execute("ROLLBACK")
+            logger.error("[DB] tolak_garansi failed: %s", e)
+            return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
