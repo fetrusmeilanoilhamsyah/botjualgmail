@@ -224,12 +224,16 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     is_admin = user.id in ADMIN_IDS
     teks = (
-        f"𝚂𝚎𝚕𝚊𝚖𝚊𝚝 𝚍𝚊𝚝𝚊𝚗𝚐 𝚍𝚒 <tg-emoji emoji-id=\"5440841102871517055\">🛒</tg-emoji> <b><a href=\"https://t.me/warunggmail\">WARUNG GMAIL BOT</a></b> <tg-emoji emoji-id=\"5440841102871517055\">🛒</tg-emoji>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"<tg-emoji emoji-id=\"6156906412761946453\">💵</tg-emoji> Saldo Anda: <b>{fmt_rupiah(saldo)}</b>\n\n"
-        f"<tg-emoji emoji-id=\"6158694317452956321\">👥</tg-emoji> User: <b>{stats['total_user']:,}</b> | <tg-emoji emoji-id=\"6003502340001238882\">📈</tg-emoji> Trx: <b>{stats['total_trx']:,} Tx</b>\n"
-        f"<tg-emoji emoji-id=\"6156673548225090260\">📦</tg-emoji> Stok: <b>{stats['stok_tersedia']:,} Akun</b> | <tg-emoji emoji-id=\"6156673548225090260\">🛍️</tg-emoji> Terjual: <b>{stats['akun_terjual']:,}</b>\n\n"
-        f"Klik tombol di bawah untuk membeli <tg-emoji emoji-id=\"5188481279963715781\">🚀</tg-emoji>"
+        f"🛒 <b><a href=\"https://t.me/warunggmail\">WARUNG GMAIL BOT</a></b>\n"
+        f"━━━━━━━━━━━━━━━━━━━\n\n"
+        f"• ID User    : <code>{user.id}</code>\n"
+        f"• Saldo      : <b>{fmt_rupiah(saldo)}</b>\n\n"
+        f"<b>STATISTIK LAYANAN:</b>\n"
+        f"• Total User : {stats['total_user']:,} orang\n"
+        f"• Total Trx  : {stats['total_trx']:,} sukses\n"
+        f"• Stok Ready : {stats['stok_tersedia']:,} pcs\n"
+        f"• Terjual    : {stats['akun_terjual']:,} pcs\n\n"
+        f"━━━━━━━━━━━━━━━━━━━"
     )
 
     channel_url = f"https://t.me/{CHANNEL_LIVE_TX.lstrip('@')}" if CHANNEL_LIVE_TX else "https://t.me/warunggmail"
